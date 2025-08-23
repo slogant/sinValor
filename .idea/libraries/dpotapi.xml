@@ -1,0 +1,23 @@
+<component name="libraryTable">
+  <library name="dpotapi">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/dpotapi.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/dpfpverification.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/dpotjni.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/JPanelSlider.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/AbsoluteLayout.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/dpfpenrollment.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jcalendar-0.8.1.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/jssc.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/log4j-1.2.17.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/swingx-all-1.6.4.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/swingx-1.6.1.jar!/" />
+      <root url="file://$PROJECT_DIR$" />
+      <root url="jar://$PROJECT_DIR$/lib/postgresql-42.6.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="file://$PROJECT_DIR$/src" />
+    </SOURCES>
+  </library>
+</component>

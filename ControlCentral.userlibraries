@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<eclipse-userlibraries>
+  <library name="jssc">
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/jssc.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/AbsoluteLayout.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/swingx-all-1.6.4.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/jcalendar-0.8.1.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/log4j-1.2.17.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/dpfpverification.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/dpotjni.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/postgresql-42.2.12.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/JPanelSlider.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/dpfpenrollment.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/jssc-2.8.0.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/dpotapi.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral/lib/swingx-1.6.1.jar" />
+    <archive path="D:/User/slogant/Desktop/ControlCentral" />
+  </library>
+</eclipse-userlibraries>
+
