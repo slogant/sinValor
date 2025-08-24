@@ -5,131 +5,122 @@
  */
 package com.xlogant.acciones;
 
-import com.xlogant.conecta.ControlaPuerto;
-import com.xlogant.panel.PanelCrearUsuario;
-import com.xlogant.principal.CentroPrincipal;
-import java.awt.Color;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
-import static javax.swing.JOptionPane.ERROR_MESSAGE;
-import static javax.swing.JOptionPane.INFORMATION_MESSAGE;
-import static javax.swing.JOptionPane.showInternalMessageDialog;
-import javax.swing.JTextField;
 import jssc.SerialPort;
 import jssc.SerialPortEvent;
 import jssc.SerialPortEventListener;
 import jssc.SerialPortException;
 import jssc.SerialPortList;
 
+import javax.swing.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 /**
+ * Gestiona la escucha de un puerto serial específico y notifica a un listener
+ * cuando se reciben datos o ocurren errores.
+ * Esta clase implementa AutoCloseable para un manejo de recursos seguro.
  *
  * @author oscar
  */
-final public class EscuchaPuertoSerial implements SerialPortEventListener {
-    
-    public EscuchaPuertoSerial(JTextField texto, JButton boton, 
-            JComboBox<String> elcombox) {
-        text = texto;
-        btns = boton;
-        comb = elcombox;
-    }
+public class EscuchaPuertoSerial implements SerialPortEventListener, AutoCloseable {
 
-    static public List<String> MuestraPuertos() {
-        String[] portNames = SerialPortList.getPortNames();
-        List<String> listaPuertos;
-        return listaPuertos = new LinkedList<>(Arrays.asList(portNames));
-    }
+    private static final Logger LOGGER = Logger.getLogger(EscuchaPuertoSerial.class.getName());
+    private final SerialPort serialPort;
+    private final SerialDataListener dataListener;
+    private final StringBuilder buffer = new StringBuilder();
 
-    static public SerialPort AbrirPuerto(String puertox) {
-        if (puertox.isEmpty()) {
-            System.out.println("Selecciona el puerto");
-            return null;
-        } else {
-            try {
-                elPuerto = new SerialPort(puertox);
-                if (!elPuerto.isOpened()) {
-                    elPuerto.openPort() ;//Abre el puerto serial
-                    elPuerto.setParams(SerialPort.BAUDRATE_9600, //Configuración del puerto serial
-                            SerialPort.DATABITS_8,
-                            SerialPort.STOPBITS_1,
-                            SerialPort.PARITY_NONE);
-                    System.out.println("El puerto se abrio");
-                    showInternalMessageDialog(CentroPrincipal.jDesktopPane1, "Se abrio el puerto para lectura", "Monitor", INFORMATION_MESSAGE);
-                } else {
-                    System.out.println("El puerto ya esta abierto....");
-                    return null;
-                }
-            } catch (SerialPortException ex) {
-                Logger.getLogger(ControlaPuerto.class.getName()).log(Level.SEVERE, null, ex);
-                System.out.printf("Error del puerto: %s%n-> ", ex.getLocalizedMessage());
-                showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", ERROR_MESSAGE);
-                return null;
-            }
-            return elPuerto;
+    /**
+     * Construye un listener para un puerto serial.
+     *
+     * @param portName El nombre del puerto a abrir (ej. "COM3" o "/dev/ttyUSB0").
+     * @param listener El listener que recibirá los datos y errores.
+     * @throws SerialPortException si el puerto no puede ser abierto o configurado.
+     */
+    public EscuchaPuertoSerial(String portName, SerialDataListener listener) throws SerialPortException {
+        if (portName == null || portName.isBlank()) {
+            throw new IllegalArgumentException("El nombre del puerto no puede ser nulo o vacío.");
         }
-    }
-
-    static public void cerrarPuerto(SerialPort el) {
-        elPuerto = el;
-        if (elPuerto.isOpened()) {
-            try {
-                elPuerto.closePort();
-                System.out.println("El puerto se ha cerrado");
-            } catch (SerialPortException ex) {
-                Logger.getLogger(ControlaPuerto.class.getName()).log(Level.SEVERE, null, ex);
-                System.out.println("Error del puerto: -> " + ex.getLocalizedMessage());
-                showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", ERROR_MESSAGE);
-                elPuerto = null;
-                System.exit(0);
-            }
-        } else {
-            System.out.println("No se logro cerrar el puerto");
+        if (listener == null) {
+            throw new IllegalArgumentException("El listener no puede ser nulo.");
         }
+
+        this.dataListener = listener;
+        this.serialPort = new SerialPort(portName);
+
+        serialPort.openPort();
+        serialPort.setParams(
+                SerialPort.BAUDRATE_9600,
+                SerialPort.DATABITS_8,
+                SerialPort.STOPBITS_1,
+                SerialPort.PARITY_NONE
+        );
+        serialPort.addEventListener(this, SerialPort.MASK_RXCHAR);
+        LOGGER.info("Puerto " + portName + " abierto y escuchando.");
     }
 
-    @Override public void serialEvent(SerialPortEvent event) {
-        if (event.isRXCHAR() && (event.getEventValue() >= 17)) {
+    /**
+     * Método estático de utilidad para obtener la lista de puertos seriales disponibles en el sistema.
+     * @return Una lista de nombres de puertos.
+     */
+    public static List<String> getAvailablePorts() {
+        return Arrays.asList(SerialPortList.getPortNames());
+    }
+
+    @Override
+    public void serialEvent(SerialPortEvent event) {
+        // Se asegura de que el evento sea de recepción de datos y que haya datos disponibles.
+        if (event.isRXCHAR() && event.getEventValue() > 0) {
             try {
-                var ldt = LocalDateTime.now();
-                var tiempo = Timestamp.valueOf(ldt);
-                var n = new StringBuilder();
-                var sb = new StringBuilder();//Variable para almacenar String del puerto
-                sb.append(elPuerto.readString(event.getEventValue()));//Almaceno el String que me envia el puerto
-                String se = (String) sb.substring(0, sb.length() - 1);//Le quito un caracter que no nececito
-                System.out.println(se);
-                var palabras = se.split("^[A-Za-z_0-9]*");//Elimino caracteres especiales
-                for (String t : palabras) {
-                    System.out.println(t);
-                    n.append(t);//LO almaceno en una nueva variable
-                }
-                var yo = n.toString().trim();//Covierto la variable n a String
-                text.requestFocus();
-                text.setText(yo);
-                text.setForeground(new Color(45, 20, 245));
-                if (!yo.isEmpty()) {
-                    sb.append("");
-                    sb.setLength(0);
-                    btns.setEnabled(false);
-                    comb.setEnabled(false);
+                // Lee los bytes disponibles del puerto.
+                byte[] receivedBytes = serialPort.readBytes(event.getEventValue());
+                // Convierte los bytes a String y los añade al buffer.
+                buffer.append(new String(receivedBytes));
+
+                // Procesa el buffer si contiene un terminador (ej. nueva línea).
+                // Esto es más robusto que procesar por número de bytes.
+                // Asumimos que cada lectura completa termina con '\n'.
+                int lineEndIndex;
+                while ((lineEndIndex = buffer.indexOf("\n")) >= 0) {
+                    // Extrae la línea completa.
+                    String line = buffer.substring(0, lineEndIndex).trim();
+                    // Elimina la línea procesada del buffer.
+                    buffer.delete(0, lineEndIndex + 1);
+
+                    if (!line.isEmpty()) {
+                        // Limpia la cadena de caracteres no deseados.
+                        // Este regex mantiene solo letras, números y guiones bajos.
+                        final String cleanedData = line.replaceAll("[^A-Za-z0-9_]", "");
+
+                        // Notifica al listener en el hilo de la UI (EDT) para seguridad.
+                        SwingUtilities.invokeLater(() -> dataListener.onDataReceived(cleanedData));
+                    }
                 }
             } catch (SerialPortException ex) {
-                Logger.getLogger(PanelCrearUsuario.class.getName()).log(Level.SEVERE, null, ex);
-                System.out.println("error: -> " + ex.getLocalizedMessage());
-                showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", ERROR_MESSAGE);
+                LOGGER.log(Level.SEVERE, "Error al leer del puerto serial.", ex);
+                // Notifica al listener del error, también en el hilo de la UI.
+                SwingUtilities.invokeLater(() -> dataListener.onError("Error de lectura: " + ex.getMessage()));
             }
         }
     }
 
-    private static SerialPort elPuerto;
-    private static JTextField text;
-    private static JButton btns;
-    private static JComboBox<String> comb;
-
+    /**
+     * Cierra el puerto serial y libera los recursos.
+     * Este método es invocado automáticamente cuando se usa en un bloque try-with-resources.
+     */
+    @Override
+    public void close() {
+        if (serialPort != null && serialPort.isOpened()) {
+            try {
+                serialPort.removeEventListener();
+                serialPort.closePort();
+                LOGGER.info("Puerto " + serialPort.getPortName() + " cerrado correctamente.");
+            } catch (SerialPortException ex) {
+                LOGGER.log(Level.SEVERE, "Error al cerrar el puerto serial.", ex);
+                // Opcional: notificar al listener del error de cierre.
+                SwingUtilities.invokeLater(() -> dataListener.onError("Error al cerrar el puerto: " + ex.getMessage()));
+            }
+        }
+    }
 }

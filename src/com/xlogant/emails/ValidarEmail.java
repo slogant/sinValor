@@ -7,28 +7,41 @@ package com.xlogant.emails;
 
 import java.util.regex.Pattern;
 
-import static java.util.regex.Pattern.compile;
-
 /**
+ * Clase de utilidad para validar direcciones de correo electrónico.
+ * <p>
+ * Esta clase no puede ser instanciada y proporciona un método estático
+ * para la validación.
  *
  * @author oscar
+ * @author oscar (refactored by Gemini)
  */
-final public class ValidarEmail {
+public final class ValidarEmail {
+
+    private static final String EMAIL_REGEX = "^[_A-Za-z0-9-\\+]+(\\.[_A-Za-z0-9-]+)*@"
+            + "[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$";
 
     /**
-     * Validate given email with regular expression.
-     *
-     * @param email email for validation
-     * @return true valid email, otherwise false
+     * El patrón de expresión regular pre-compilado para la validación de emails.
+     * Se compila una sola vez para mejorar el rendimiento.
      */
-    static public boolean validaEmail(String email) {
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(EMAIL_REGEX);
 
-        // Compiles the given regular expression into a pattern.
-        var pattern = compile(PATTERN_EMAIL);
-        // Match the given input against this pattern
-        return pattern.matcher(email).matches();
+    /**
+     * Constructor privado para prevenir la instanciación de esta clase de utilidad.
+     */
+    private ValidarEmail() {}
 
+    /**
+     * Valida una dirección de correo electrónico usando una expresión regular.
+     *
+     * @param email el correo electrónico a validar.
+     * @return {@code true} si el email es válido, {@code false} en caso contrario.
+     */
+    public static boolean validaEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        return EMAIL_PATTERN.matcher(email).matches();
     }
-    static final private String PATTERN_EMAIL = "^[_A-Za-z0-9-\\+]+(\\.[_A-Za-z0-9-]+)*@"
-            + "[A-Za-z0-9-]+(\\.[A-Za-z0-9]+)*(\\.[A-Za-z]{2,})$";
 }

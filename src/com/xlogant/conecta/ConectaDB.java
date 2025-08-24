@@ -1,101 +1,66 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.xlogant.conecta;
 
-import com.xlogant.principal.CentroPrincipal;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
-import java.io.Serial;
-import java.io.Serializable;
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import static java.lang.System.*;
-import static java.sql.DriverManager.getConnection;
-import static javax.swing.JOptionPane.WARNING_MESSAGE;
-import static javax.swing.JOptionPane.showInternalMessageDialog;
+import java.util.Properties;
 
 /**
+ * Gestiona el pool de conexiones a la base de datos usando HikariCP.
+ * La configuración se carga desde el archivo db.properties.
  *
  * @author oscar
  */
-final public class ConectaDB implements Serializable {
+public final class ConectaDB {
 
-    static public Connection obtenerConexion() {
-        try {
-            conexion = getConnection(URLDB, USUARIO, CLAVE);
-            conexion.setAutoCommit(false);
-            out.println("Conexion abierta");
-        } catch (SQLException e) {
-            out.println("Error: -> " + e.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, e.getLocalizedMessage(), "Monitor", WARNING_MESSAGE);
-            exit(0);
-        }
-        return conexion;
-    }
+    private static final HikariDataSource dataSource;
 
-    static public void cerrarConexion(Connection con) {
-        try {
-            if (con != null) {
-                con.close();
+    static {
+        Properties props = new Properties();
+        // Carga las propiedades desde el archivo db.properties en el classpath
+        try (InputStream input = ConectaDB.class.getClassLoader().getResourceAsStream("db.properties")) {
+            if (input == null) {
+                System.err.println("Lo siento, no se pudo encontrar el archivo db.properties");
+                // En una aplicación real, lanzar una excepción aquí es una buena idea.
+                throw new IllegalStateException("No se pudo encontrar db.properties en el classpath");
             }
-        } catch (SQLException e) {
-            out.println(e.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, e.getLocalizedMessage(), "Monitor", WARNING_MESSAGE);
+            props.load(input);
+        } catch (IOException ex) {
+            // Ocurrió un error al leer el archivo
+            throw new RuntimeException("Error al cargar db.properties", ex);
         }
+
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(props.getProperty("jdbcUrl"));
+        config.setUsername(props.getProperty("dbUser"));
+        config.setPassword(props.getProperty("dbPassword"));
+
+        // Propiedades opcionales de HikariCP desde el archivo
+        config.setPoolName(props.getProperty("hikari.poolName", "DefaultPool"));
+        config.setMaximumPoolSize(Integer.parseInt(props.getProperty("hikari.maximumPoolSize", "10")));
+        config.setMinimumIdle(Integer.parseInt(props.getProperty("hikari.minimumIdle", "2")));
+        config.setConnectionTimeout(Long.parseLong(props.getProperty("hikari.connectionTimeout", "30000")));
+        config.setIdleTimeout(Long.parseLong(props.getProperty("hikari.idleTimeout", "600000")));
+        config.setMaxLifetime(Long.parseLong(props.getProperty("hikari.maxLifetime", "1800000")));
+
+        dataSource = new HikariDataSource(config);
     }
 
-    static public void cerrarPreparaStatement(PreparedStatement ps) {
-        try {
-            if (ps != null) {
-                ps.close();
-            }
-        } catch (SQLException e) {
-            out.println(e.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, e.getLocalizedMessage(), "Monitor", WARNING_MESSAGE);
-        }
-    }
+    /**
+     * Constructor privado para prevenir la instanciación de esta clase de utilidad.
+     */
+    private ConectaDB() {}
 
-    static public void cerrarResultSet(ResultSet re) {
-        try {
-            if (re != null) {
-                re.close();
-            }
-        } catch (SQLException e) {
-            out.println(e.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, e.getLocalizedMessage(), "Monitor", WARNING_MESSAGE);
-        }
+    /**
+     * Obtiene una conexión del pool de conexiones.
+     * @return una Connection lista para ser usada.
+     * @throws SQLException si ocurre un error al obtener la conexión.
+     */
+    public static Connection getConnection() throws SQLException {
+        return dataSource.getConnection();
     }
-
-    static public void cerrarCommit(Connection con) {
-        try {
-            if (con != null) {
-                con.commit();
-            }
-        } catch (SQLException e) {
-            out.println(e.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, e.getLocalizedMessage(), "Monitor", WARNING_MESSAGE);
-        }
-    }
-
-    static public void rollback(Connection con) {
-        try {
-            if (con != null) {
-                con.rollback();
-            }
-        } catch (SQLException e) {
-            out.println(e.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, e.getLocalizedMessage(), "Monitor", WARNING_MESSAGE);
-        }
-    }
-    
-    @Serial
-    static final private long serialVersionUID = -6300264245168250633L;
-    static final private String URLDB = "jdbc:postgresql://localhost:5432/centro";
-    //static final private String URLDB = "jdbc:postgresql://centro.cuesfczh4pdj.us-east-2.rds.amazonaws.com:5432/centro";
-    static final private String USUARIO = "oscar", CLAVE = "marieljava";
-    static private Connection conexion;
 }

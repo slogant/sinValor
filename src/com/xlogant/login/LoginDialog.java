@@ -6,54 +6,34 @@
 package com.xlogant.login;
 
 import com.xlogant.control.texto.JTextFieldLimit;
-import com.xlogant.controlador.ControlaUsuario;
-
-import static com.xlogant.controlador.ControlaUsuario.*;
-import static com.xlogant.encripta.EncriptaGenerador.*;
-import static java.awt.EventQueue.*;
-import static java.awt.Toolkit.*;
-import static java.lang.Runtime.*;
-import static java.lang.Runtime.getRuntime;
-import static java.lang.String.*;
-import static java.lang.System.*;
-import static java.lang.Thread.*;
-import static java.net.InetAddress.*;
-import static java.time.LocalTime.*;
-import static java.time.format.DateTimeFormatter.*;
-import static javax.swing.JOptionPane.*;
-import static javax.swing.UIManager.*;
-
 import com.xlogant.principal.CentroPrincipal;
 
 import java.awt.*;
 import java.awt.event.WindowAdapter;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.Serial;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.concurrent.TimeUnit;
-import javax.swing.ImageIcon;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
-import javax.swing.JFrame;
-import javax.swing.JOptionPane;
-import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.*;
+
+import static java.lang.System.exit;
+import static java.lang.System.out;
 
 /**
  *
  * @author oscar
  */
 public final class LoginDialog extends JDialog {
+
+    private final AuthenticationService authService;
+    private javax.swing.Timer clockTimer;
 
     /**
      * Creates new form LoginDialog
@@ -63,9 +43,10 @@ public final class LoginDialog extends JDialog {
      */
     public LoginDialog(java.awt.Frame parent, boolean modal) {
         super(parent, modal);
+        this.authService = new AuthenticationService();
         initComponents();
-        IniciaReloj();
-        controlBotonones();
+        initCustomComponents();
+        startClock();
     }
 
     /**
@@ -368,250 +349,171 @@ public final class LoginDialog extends JDialog {
         setLocationRelativeTo(null);
     }// </editor-fold>//GEN-END:initComponents
 
-    private void controlBotonones() {
-        var nombre = getProperty("user.name");
-        so_user.setText(nombre);
-        try {
-            textNombre.addActionListener(e -> ((JComponent) e.getSource()).transferFocus());
-            textClave.addActionListener(e -> ((JComponent) e.getSource()).transferFocus());
-            String s;
-            String ca;
-            String Otro;
-            String verPost = null;
-            var runtime = getRuntime();
-            var ven = getProperty("java.vendor");
-            final var pb = new ProcessBuilder("/bin/bash", "-c","psql --version");
-            final var process = pb.start();
-            try (var sc = new Scanner(process.getInputStream())) {
-                while (sc.hasNext()) {
-                    //psql.setText(sc.nextLine());
-                    //var ds = sc.nextLine().toString();
-                    System.out.println(sc.nextLine());
-                }
-            }
-            var py = runtime.exec("psql --version");
-            var IP = getLocalHost().getHostAddress();
-            var mexico = new Locale.Builder().setLanguage("es").setRegion("MX").build();
-            var zdt = ZonedDateTime.now();
-            var OSV = getProperty("os.version");
-            var SO = getProperty("os.name");
-            var SOS = getProperty("os.arch");
-            var VERSION = getProperty("java.version");
-            var formatter = ofPattern(ANIO, mexico);
-            var tiempo = now();
-            var valorFecha = LocalDate.now().format(formatter);
-            var valorHora = tiempo.toString();
-            sistema.setText(SO);
-            var stdi = new BufferedReader(new InputStreamReader(
-                    py.getInputStream()));
-            var stde = new BufferedReader(new InputStreamReader(
-                    py.getErrorStream()));
-            while ((ca = stdi.readLine()) != null) {
-                psql.setText(ca);
-                verPost = ca;
-                out.println(ca);
-            }
-            while ((ca = stde.readLine()) != null) {
-                out.println(ca);
-                verPost = ca;
-            }
-            task = new TimerTask() {
-                @Override
-                public void run() {
-                    String muestraLetras;
-                    if (i < PALABRAS.length()) {
-                        try {
-                            TimeUnit.MILLISECONDS.sleep(100);
-                            lestras = PALABRAS.substring(j, i);
-                            muestraLetras = muestra.getText().concat(lestras);
-                            muestra.setText(muestraLetras);
-                            j += 1;
-                        } catch (InterruptedException ex) {
-                            Logger.getLogger(LoginDialog.class.getName()).log(Level.SEVERE, null, ex);
-                            currentThread().interrupt();
-                            out.println("Cadena terminada");
-                        }
-                    } else {
-                        tiem.cancel();
-                        task.cancel();
-                        out.println("tiempo cancelado");
-                    }
-                    i++;
-                }
-            };
-            tiem = new Timer();
-            tiem.schedule(task, 0, 100);
-            so.setText(SO);
-            kernel.setText(OSV);
-            lajava.setText(VERSION);
-            vendorJava.setText(ven);
-            fechas.setText(valorFecha);
-            ip.setText(IP.trim());
-            //ip.setText(la.get(1));
-            var toolkit = getDefaultToolkit();
-            var screenSize = toolkit.getScreenSize();
-            var x = screenSize.width;
-            var y = screenSize.height;
-            setSize(x, y);
-            setAlwaysOnTop(true);
-            setLocationRelativeTo(null);
+    private void initCustomComponents() {
+        // Configurar listeners y estado inicial de la UI
+        setupSystemInfo();
+        setupActionListeners();
+        setupFocusTransfer();
+
+        // Configurar la ventana para pantalla completa
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        GraphicsDevice gd = ge.getDefaultScreenDevice();
+        if (gd.isFullScreenSupported()) {
             setUndecorated(true);
-            toFront();
-            teclado.addActionListener(e -> {
-                try {
-                    var processBuilder = new ProcessBuilder();
-                    processBuilder.command("/usr/bin/florence");
-                    var procesxs = processBuilder.start();
-                    var ret = procesxs.waitFor();
-                    out.printf("Program exited with code: %d", ret);
-                } catch (IOException | InterruptedException ex) {
-                    Logger.getLogger(LoginDialog.class.getName()).log(Level.SEVERE, null, ex);
-                    out.println(ex.getCause());
-                }
-            });
-
-            acceder.addActionListener(e -> {
-
-                var mCaptura = false;
-                var SOSS = sistema.getText();
-                var Nombre = textNombre.getText();
-                var Clave = new String(textClave.getPassword());
-                var encriptado = getHash(Clave, 5);
-                if (Nombre.equals("")) {
-                    res.setText("El Campo nombre esta vacío....");
-                    showMessageDialog(LoginDialog.this, "El Campo usuario esta vacío", "Monitor", ERROR_MESSAGE);
-                    textNombre.requestFocus();
-                } else if (Clave.equals("")) {
-                    res.setText("El Campo clave esta vacío....");
-                    showMessageDialog(LoginDialog.this, "El Campo clave esta vacío", "Monitor", ERROR_MESSAGE);
-                    textClave.requestFocus();
-                } else if (login(Nombre, encriptado)) {
-                    if (usuarioActivo(Nombre, encriptado)) {
-                        var ID = obtenerID(Nombre, encriptado, true);
-                        var roles = obtenerRole(Nombre, encriptado, true);
-                        var encarga = obtenerIDEmp(Nombre, encriptado, true);
-                        var nombreUs = obtenerPorNombre(Nombre, encriptado, true);
-                        var elIDS = IDSUCURSAL(Nombre, encriptado);
-                        var nombreSuc = NombreSuc(Nombre, encriptado, elIDS);
-                        var modifica = valueOf(roles);
-                        var envia = valueOf(ID);
-                        var vendor = getProperty("java.vendor");
-                        var numeroProcesadores = getRuntime().availableProcessors();
-                        var procesadores = valueOf(numeroProcesadores);
-                        jk = modifica;
-                        e_id = envia;
-                        elNombre = nombreUs;
-                        idempre = encarga;
-                        nomSucursales = nombreSuc;
-                        var IP_PC = IP.strip();
-                        var hecho = insertaIngreso(ID, IP_PC, SOSS, SO.concat(" ").concat(OSV), ENTRADA, VERSION, nombreSuc, vendor, procesadores);
-                        //Cambiando el icono por defecto del dialogo
-                        var iconos = new ImageIcon(Objects.requireNonNull(getClass().getResource("/com/xlogant/image/Keysita.gif")));
-                        //Modificando el color de fondo del dialodo de aviso
-                        put("OptionPane.background", Color.white);
-                        put("Panel.background", Color.white);
-                        showMessageDialog(LoginDialog.this, "Usuario identificado ", "Monitor", INFORMATION_MESSAGE, iconos);
-                        out.println(hecho);
-                        var centroPrincipal = new CentroPrincipal();
-                        CentroPrincipal.valorTexto.setText(modifica);
-                        CentroPrincipal.controlVariable.setText(modifica);
-                        centroPrincipal.setVisible(true);
-                        centroPrincipal.toFront();
-                        centroPrincipal.repaint();
-                        centroPrincipal.revalidate();
-                        var ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-                        var gs = ge.getDefaultScreenDevice();
-                        gs.setFullScreenWindow(centroPrincipal);
-                        //GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().setFullScreenWindow(centroPrincipal);
-                        LoginDialog.this.dispose();
-                        //imagenPanel.guardarDirecto();
-                        tiem.cancel();
-                        task.cancel();
-                        temp.stop();
-                        out.println("tiempo cancelado");
-                        out.println(getProperty("user.home") + " ...............................................................");
-                    } else {
-                        showMessageDialog(LoginDialog.this, "Usuario inactivo ", "Monitor", ERROR_MESSAGE);
-                        textNombre.setText("");
-                        textClave.setText("");
-                        textNombre.requestFocus();
-                        revalidate();
-                        repaint();
-                    }
-                } else {
-                    res.setText("Usuario no encontrado...");
-                    textNombre.setText("");
-                    textClave.setText("");
-                    textNombre.requestFocus();
-                    revalidate();
-                    repaint();
-                }
-            });
-
-            cerrar.addActionListener(e -> {
-                var close = showConfirmDialog(this, "Desea cerrar la aplicación", "Monitor", YES_NO_OPTION);
-                if (close == YES_OPTION) {
-                    revalidate();
-                    repaint();
-                    dispose();
-                    tiem.cancel();
-                    task.cancel();
-                    temp.stop();
-                    exit(0);
-                } else {
-                    showMessageDialog(this, "Cancelado salida del programa", "Monitor", INFORMATION_MESSAGE);
-                    textNombre.setText("");
-                    textClave.setText("");
-                    textNombre.requestFocus();
-                }
-            });
-            acceder.setMnemonic('A');
-            cerrar.setMnemonic('C');
-            getRootPane().setDefaultButton(acceder);
-        } catch (IOException ex) {
-            Logger.getLogger(LoginDialog.class.getName()).log(Level.SEVERE, null, ex);
-            out.println(ex.getLocalizedMessage());
+            gd.setFullScreenWindow(this);
+        } else {
+            // Fallback para entornos que no soportan pantalla completa
+            setExtendedState(JFrame.MAXIMIZED_BOTH);
+            setUndecorated(true);
+            setVisible(true);
         }
     }
 
-    private void IniciaReloj() {
-        temp = new javax.swing.Timer(1000, e -> cargaHora());
-        temp.start();
+    private void setupFocusTransfer() {
+        textNombre.addActionListener(e -> textClave.requestFocusInWindow());
+        textClave.addActionListener(e -> acceder.requestFocusInWindow());
     }
 
-    private void cargaHora() {
-        // try {
-        String ac;
-        var runtime = getRuntime();
-        //var cmd = "wmic os get lastBootUpTime";
-        //Process pro = runtime.exec(cmd);
-        var ti = now().format(ofPattern("KK:mm:ss a"));
-        /* var stdE = new BufferedReader(new InputStreamReader(
-                    pro.getErrorStream()));
-            var stdI = new BufferedReader(new InputStreamReader(
-                    pro.getInputStream()));*/
-        lahora.setText(ti);
-        /* while ((ac = stdI.readLine()) != null) {
-                var tiempoAcceso = ac;
-                tiempouso.setText(tiempoAcceso.toLowerCase());
-                System.out.println("--------------->" + tiempoAcceso);
+    private void setupSystemInfo() {
+        so_user.setText(System.getProperty("user.name", "N/A"));
+        sistema.setText(System.getProperty("os.name", "N/A"));
+        kernel.setText(System.getProperty("os.version", "N/A"));
+        lajava.setText(System.getProperty("java.version", "N/A"));
+        vendorJava.setText(System.getProperty("java.vendor", "N/A"));
+        numProcesador.setText(String.valueOf(Runtime.getRuntime().availableProcessors()));
+
+        try {
+            ip.setText(InetAddress.getLocalHost().getHostAddress());
+        } catch (UnknownHostException e) {
+            ip.setText("?.?.?.?");
+            Logger.getLogger(LoginDialog.class.getName()).log(Level.WARNING, "No se pudo obtener la IP local", e);
+        }
+    }
+
+    private void setupActionListeners() {
+        acceder.addActionListener(e -> handleLogin());
+        cerrar.addActionListener(e -> handleClose());
+        teclado.addActionListener(e -> launchOnScreenKeyboard());
+
+        acceder.setMnemonic('A');
+        cerrar.setMnemonic('C');
+        getRootPane().setDefaultButton(acceder);
+    }
+
+    private void handleLogin() {
+        String username = textNombre.getText();
+        String password = new String(textClave.getPassword());
+
+        if (username.isBlank()) {
+            showError("El campo usuario no puede estar vacío.", textNombre);
+            return;
+        }
+        if (password.isBlank()) {
+            showError("El campo clave no puede estar vacío.", textClave);
+            return;
+        }
+
+        // Deshabilitar UI mientras se procesa
+        setUIEnabled(false);
+        res.setText("Autenticando, por favor espere...");
+
+        // Usar SwingWorker para no bloquear la UI
+        new SwingWorker<Optional<UsuarioDTO>, Void>() {
+            @Override
+            protected Optional<UsuarioDTO> doInBackground() {
+                return authService.authenticate(username, password);
             }
-            while ((ac = stdE.readLine()) != null) {
-                System.out.println(ac);
-            }*/
-        var tamanio = 1024 * 1024;
-        var numeroProcesadores = getRuntime().availableProcessors();
-        var colocarNumeroProcesador = valueOf(numeroProcesadores);
-        numProcesador.setText(colocarNumeroProcesador);
-        /*System.out.println(numeroProcesadores);
-            System.out.println("Maxima Memoria: " + runtime.maxMemory() / tamanio + "MB");
-            System.out.println("Memoria Total: " + runtime.totalMemory() / tamanio + "MB");
-            System.out.println("Memoria libre: " + runtime.freeMemory() / tamanio + "MB");
-            System.out.println("Memoria usuada: " + (runtime.totalMemory() - runtime.freeMemory()) / tamanio + "MB");*/
-        /*} catch (IOException ex) {
-            Logger.getLogger(LoginDialog.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println(ex.getLocalizedMessage());
-        }*/
+
+            @Override
+            protected void done() {
+                try {
+                    Optional<UsuarioDTO> result = get();
+                    if (result.isPresent()) {
+                        launchMainApplication(result.get());
+                    } else {
+                        showError("Usuario o clave incorrectos, o el usuario está inactivo.", textNombre);
+                        resetLoginForm();
+                    }
+                } catch (Exception e) {
+                    Logger.getLogger(LoginDialog.class.getName()).log(Level.SEVERE, "Error durante el login", e);
+                    showError("Ocurrió un error inesperado durante el inicio de sesión.", textNombre);
+                    resetLoginForm();
+                } finally {
+                    setUIEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    private void launchMainApplication(UsuarioDTO usuario) {
+        // Detener timers y liberar recursos de esta ventana
+        if (clockTimer != null) {
+            clockTimer.stop();
+        }
+        dispose();
+
+        // Lanzar la ventana principal, pasando el DTO del usuario
+        EventQueue.invokeLater(() -> {
+            CentroPrincipal centroPrincipal = new CentroPrincipal(usuario);
+            centroPrincipal.setVisible(true);
+        });
+    }
+
+    private void handleClose() {
+        int choice = JOptionPane.showConfirmDialog(this,
+                "¿Desea cerrar la aplicación?", "Confirmar Salida",
+                JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+        if (choice == JOptionPane.YES_OPTION) {
+            exit(0);
+        }
+    }
+
+    private void launchOnScreenKeyboard() {
+        try {
+            // Este comando es específico de Linux. En una app real, esto necesitaría
+            // ser más robusto y multiplataforma.
+            new ProcessBuilder("florence").start();
+        } catch (IOException ex) {
+            Logger.getLogger(LoginDialog.class.getName()).log(Level.WARNING, "No se pudo iniciar el teclado en pantalla 'florence'", ex);
+            JOptionPane.showMessageDialog(this,
+                    "No se pudo encontrar el teclado en pantalla (florence).\nAsegúrese de que esté instalado.",
+                    "Error", JOptionPane.WARNING_MESSAGE);
+        }
+    }
+
+    private void startClock() {
+        // Usar javax.swing.Timer para seguridad con hilos de Swing
+        clockTimer = new javax.swing.Timer(1000, e -> updateDateTime());
+        clockTimer.setInitialDelay(0);
+        clockTimer.start();
+    }
+
+    private void updateDateTime() {
+        Locale mexicoLocale = new Locale("es", "MX");
+        fechas.setText(LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy", mexicoLocale)));
+        lahora.setText(LocalTime.now().format(DateTimeFormatter.ofPattern("hh:mm:ss a")));
+    }
+
+    private void setUIEnabled(boolean enabled) {
+        acceder.setEnabled(enabled);
+        cerrar.setEnabled(enabled);
+        textNombre.setEnabled(enabled);
+        textClave.setEnabled(enabled);
+    }
+
+    private void resetLoginForm() {
+        res.setText("Por favor, intente de nuevo.");
+        textClave.setText("");
+        textNombre.selectAll();
+        textNombre.requestFocusInWindow();
+    }
+
+    private void showError(String message, JComponent componentToFocus) {
+        JOptionPane.showMessageDialog(this, message, "Error de Autenticación", JOptionPane.ERROR_MESSAGE);
+        if (componentToFocus != null) {
+            componentToFocus.requestFocusInWindow();
+        }
     }
 
     /**
@@ -619,66 +521,26 @@ public final class LoginDialog extends JDialog {
      */
     public static void main(String... args) {
         try {
-            /* Set the Nimbus look and feel */
-            //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
-            /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
-             * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html
-             */
-            String s;
-            String carga = null;
-            //var runtime = Runtime.getRuntime();
-            //final Process p = runtime.exec("cat /etc/issue.net");
-            var IPx = getLocalHost();
-            var OSV = getProperty("os.version");
-            var SO = getProperty("os.name");
-            /* BufferedReader stdInput = new BufferedReader(new InputStreamReader(
-                    p.getInputStream()));
-            BufferedReader stdError = new BufferedReader(new InputStreamReader(
-                    p.getErrorStream()));
-            while ((s = stdInput.readLine()) != null) {
-                carga = s;
-                System.out.println(s);
-            }
-            while ((s = stdError.readLine()) != null) {
-                carga = s;
-                System.out.println(s);
-            }*/
-            var IP_PC = IPx.toString().trim();
-            var inicio = currentTimeMillis();
-            try {
-                for (var info : getInstalledLookAndFeels()) {
-                    if ("Metal".equals(info.getName())) {
-                        setLookAndFeel(info.getClassName());
-                        /* Create and display the dialog */
-                        invokeLater(() -> {
-                            var dialog = new LoginDialog(new JFrame(), true);
-                            dialog.addWindowListener(new WindowAdapter() {
-                                @Override
-                                public void windowClosing(java.awt.event.WindowEvent e) {
-                                    exit(0);
-                                }
-                            });
-                            dialog.setVisible(true);
-                        });
-                        break;
-                    }
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                if ("Metal".equals(info.getName())) {
+                    UIManager.setLookAndFeel(info.getClassName());
+                    break;
                 }
-            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException ex) {
-                Logger.getLogger(LoginDialog.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
             }
-            var fin = currentTimeMillis();
-            var total = fin - inicio;
-            var controlado = valueOf(total);
-            if (insertaInicio(IP_PC, carga, SO.concat(" ").concat(OSV), controlado)) {
-                out.println("Datos guardaddos inicio ");
-            } else {
-                out.println("No se guardaron los datos de inicio");
-            }
-        } catch (IOException ex) {
-            Logger.getLogger(LoginDialog.class.getName()).log(Level.SEVERE, null, ex);
-            out.println(ex.getLocalizedMessage());
+        } catch (Exception ex) {
+            Logger.getLogger(LoginDialog.class.getName()).log(Level.SEVERE, "No se pudo establecer el Look and Feel 'Metal'", ex);
         }
-        //</editor-fold>
+
+        EventQueue.invokeLater(() -> {
+            var dialog = new LoginDialog(new JFrame(), true);
+            dialog.addWindowListener(new WindowAdapter() {
+                @Override
+                public void windowClosing(java.awt.event.WindowEvent e) {
+                    exit(0);
+                }
+            });
+            dialog.setVisible(true);
+        });
     }
 
 
@@ -705,20 +567,4 @@ public final class LoginDialog extends JDialog {
     // End of variables declaration//GEN-END:variables
     @Serial
     private static final long serialVersionUID = -4477681729100140273L;
-    private final static String ANIO = "dd/MM/yyyy";
-    private final static String HORA = "hh : mm : ss z";
-    private javax.swing.Timer temp;
-    private TimerTask task;
-    private Timer tiem;
-    private int i = 1, j = 0;
-    private final static String PALABRAS = "Sistemas desarrollado por Marielux 2021 Todos los Derechos reservados...";
-    private final static String ENTRADA = "ENTRADA";
-    private String lestras;
-    public static String jk, e_id, nomSucursales;
-    public static String elNombre;
-    public static long idempre;
-    private GraphicsDevice vc;
-    public static int role, rol, muestrame;
-    private ArrayList<String> la;
-    //private ImagePanel imagenPanel = new ImagePanel();
 }
