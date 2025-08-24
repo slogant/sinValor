@@ -6,91 +6,77 @@
 package com.xlogant.encripta;
 
 import java.io.Serializable;
-import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import static java.lang.Integer.toHexString;
 
 /**
+ * Clase de utilidad para generar resúmenes (hashes) de cadenas de texto
+ * utilizando diversos algoritmos criptográficos.
+ * <p>
+ * Esta clase no puede ser instanciada.
  *
  * @author oscar
+ * @author oscar (refactored by Gemini)
  */
 final public class EncriptaGenerador implements Serializable {
 
     /**
-     * *
-     * Convierte un arreglo de bytes a String usando valores hexadecimales
-     *
-     * @param digest arreglo de bytes a convertir
-     * @return String creado a partir de digest
+     * Constructor privado para prevenir la instanciación de esta clase de utilidad.
      */
-    static private String toHexadecimal(byte[] digest) {
-        var hash = "";
-        for (var aux : digest) {
-            var b = aux & 0xff;
-            if (toHexString(b).length() == 1) {
-                hash += "0";
-            }
-            hash += toHexString(b);
-        }
-        return hash;
+    private EncriptaGenerador() {
     }
 
     /**
-     * *
-     * Encripta una cadena mediante algoritmo de resumen de mensaje.
+     * Convierte un arreglo de bytes a su representación en cadena hexadecimal.
+     * Utiliza un StringBuilder para un rendimiento óptimo.
      *
-     * @param cadena texto a encriptar
-     * @param tipoAlgoritmo
-     * @return mensaje encriptado
+     * @param digest el arreglo de bytes a convertir.
+     * @return una cadena de texto en formato hexadecimal.
      */
-    static public String getHash(String cadena, int tipoAlgoritmo) {
-        try {
-            byte[] digest;
-            var buffer = cadena.getBytes();
-            var messageDigest = MessageDigest.getInstance(algoritmos[tipoAlgoritmo]);
-            messageDigest.reset();
-            messageDigest.update(buffer);
-            digest = messageDigest.digest();
-            return toHexadecimal(digest);
-        } catch (NoSuchAlgorithmException ex) {
-            Logger.getLogger(EncriptaGenerador.class.getName()).log(Level.SEVERE, null, ex);
-            return " ";
+    private static String toHexadecimal(byte[] digest) {
+        StringBuilder hexString = new StringBuilder(2 * digest.length);
+        for (byte b : digest) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
         }
+        return hexString.toString();
     }
 
-    public static String encryptThisString(String input) {
+    /**
+     * Encripta (genera un hash) una cadena de texto usando un algoritmo de la lista predefinida.
+     *
+     * @param cadena        el texto a encriptar.
+     * @param tipoAlgoritmo el índice del algoritmo a usar del array {@code algoritmos}.
+     * @return el mensaje encriptado en formato hexadecimal.
+     * @throws IllegalStateException si el algoritmo de hash solicitado no se encuentra,
+     *                               lo que indica un error de programación.
+     * @throws IllegalArgumentException si la cadena de entrada es nula o el tipo de algoritmo es inválido.
+     */
+    public static String getHash(String cadena, int tipoAlgoritmo) {
+        if (cadena == null) {
+            throw new IllegalArgumentException("La cadena de entrada no puede ser nula.");
+        }
+        if (tipoAlgoritmo < 0 || tipoAlgoritmo >= algoritmos.length) {
+            throw new IllegalArgumentException("El tipo de algoritmo es inválido: " + tipoAlgoritmo);
+        }
+
         try {
-            // getInstance() method is called with algorithm SHA-512 
-            var md = MessageDigest.getInstance("SHA-512");
-
-            // digest() method is called 
-            // to calculate message digest of the input string 
-            // returned as array of byte 
-            var messageDigest = md.digest(input.getBytes());
-
-            // Convert byte array into signum representation 
-            var no = new BigInteger(1, messageDigest);
-
-            // Convert message digest into hex value 
-            var hashtext = no.toString(16);
-
-            // Add preceding 0s to make it 32 bit 
-            while (hashtext.length() < 32) {
-                hashtext = "0" + hashtext;
-            }
-
-            // return the HashText 
-            return hashtext;
-        } // For specifying wrong message digest algorithms 
-        catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
+            // Es una buena práctica especificar siempre el charset.
+            byte[] buffer = cadena.getBytes(StandardCharsets.UTF_8);
+            MessageDigest messageDigest = MessageDigest.getInstance(algoritmos[tipoAlgoritmo]);
+            byte[] digest = messageDigest.digest(buffer);
+            return toHexadecimal(digest);
+        } catch (NoSuchAlgorithmException ex) {
+            // Esto no debería ocurrir si los nombres en el array son correctos.
+            // Lanzar una excepción en tiempo de ejecución es apropiado aquí.
+            throw new IllegalStateException("Algoritmo de hash no encontrado: " + algoritmos[tipoAlgoritmo], ex);
         }
     }
 
     private static final long serialVersionUID = -3652912919420371454L;
-    static final private String[] algoritmos = {"MD2", "MD5", "SHA-1", "SHA-256", "SHA-384", "SHA-512"};
+    private static final String[] algoritmos = {"MD2", "MD5", "SHA-1", "SHA-256", "SHA-384", "SHA-512"};
 }

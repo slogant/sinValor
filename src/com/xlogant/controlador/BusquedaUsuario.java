@@ -7,87 +7,94 @@ package com.xlogant.controlador;
 
 import java.io.Serial;
 import java.io.Serializable;
+import com.xlogant.conecta.ConectaDB;
+import com.xlogant.modelo.UsuarioDB;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-
-import com.xlogant.modelo.UsuarioDB;
-
 import java.sql.SQLException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.swing.JMenuItem;
-
-import static com.xlogant.conecta.ConectaDB.cerrarConexion;
-import static com.xlogant.conecta.ConectaDB.obtenerConexion;
 
 /**
+ * Clase de acceso a datos (DAO) para la entidad Usuario.
+ * Proporciona métodos para consultar usuarios en la base de datos.
+ * <p>
+ * Esta clase es un servicio sin estado; es seguro crear una instancia
+ * y llamar a sus métodos.
+ *
  * @author oscar
  */
 public class BusquedaUsuario implements Serializable {
 
-    public BusquedaUsuario(JMenuItem unItem) {
-        try {
-            conexion = obtenerConexion();
-            pstm = conexion.prepareStatement(CONSULTALL);
-            pst = conexion.prepareStatement(CONSULTA);
-        } catch (SQLException ex) {
-            Logger.getLogger(BusquedaUsuario.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println(ex.getCause());
-        }
-    }
-
-    public List<UsuarioDB> getDatosUsuario() {
-        var datosUsuario = new LinkedList<UsuarioDB>();
-        try {
-            try (var losresuktados = pstm.executeQuery()) {
-                while (losresuktados.next()) {
-                    datosUsuario.add(new UsuarioDB(losresuktados.getLong(1),
-                            losresuktados.getString(2), losresuktados.getString(3),
-                            losresuktados.getBoolean(4), losresuktados.getInt(5)));
-                }
-            }
-        } catch (SQLException e) {
-            System.out.println(e.getCause());
-        } finally {
-            cerrarConexion(conexion);
-        }
-        return datosUsuario;
-    }
-
-    public List<UsuarioDB> obtenerId(String nombre, String clave, boolean activo) {
-        var LosUsuarios = new LinkedList<UsuarioDB>();
-        try {
-            pst.setString(1, nombre);
-            pst.setString(2, clave);
-            pst.setBoolean(3, activo);
-            try (var resulta = pst.executeQuery()) {
-                while (resulta.next()) {
-                    LosUsuarios.add(new UsuarioDB(resulta.getInt(1),
-                            resulta.getString(2), resulta.getString(3),
-                            resulta.getBoolean(4), resulta.getInt(5)));
-                }
-            }
-        } catch (SQLException e) {
-            System.out.println(e.getCause());
-        } finally {
-            cerrarConexion(conexion);
-        }
-        return LosUsuarios;
-    }
-
-
-    private Connection conexion = null;
-    private PreparedStatement pstm = null;
-    private PreparedStatement pst;
-    private ResultSet resultado = null;
-    private final static String CONSULTALL = "SELECT * FROM datos_usuario";
-    private final static String CONSULTA = "SELECT id_role FROM datos_usuario "
-            + "WHERE usuario_nombre= ? AND clave_usuario= ? "
-            + "AND estatus_de_usuario= ?";
     @Serial
     private static final long serialVersionUID = -3448797666703898568L;
 
+    private static final String FIND_ALL_QUERY = "SELECT * FROM datos_usuario";
+    // Se corrigió la consulta para seleccionar todas las columnas necesarias.
+    private static final String FIND_BY_CREDENTIALS_QUERY = "SELECT * FROM datos_usuario "
+            + "WHERE usuario_nombre = ? AND clave_usuario = ? AND status_de_usuario = ?";
+
+    /**
+     * Obtiene una lista de todos los usuarios de la base de datos.
+     *
+     * @return una lista de objetos UsuarioDB.
+     * @throws SQLException si ocurre un error durante el acceso a la base de datos.
+     */
+    public List<UsuarioDB> getDatosUsuario() throws SQLException {
+        List<UsuarioDB> usuarios = new LinkedList<>();
+        // try-with-resources asegura que la conexión y otros recursos se cierren siempre.
+        try (Connection conn = ConectaDB.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(FIND_ALL_QUERY);
+             ResultSet rs = pstmt.executeQuery()) {
+
+            while (rs.next()) {
+                usuarios.add(mapResultSetToUsuario(rs));
+            }
+        }
+        return usuarios;
+    }
+
+    /**
+     * Obtiene una lista de usuarios que coinciden con las credenciales proporcionadas.
+     *
+     * @param nombre el nombre de usuario.
+     * @param clave  la clave del usuario.
+     * @param activo el estado de actividad del usuario.
+     * @return una lista de objetos UsuarioDB que coinciden.
+     * @throws SQLException si ocurre un error durante el acceso a la base de datos.
+     */
+    public List<UsuarioDB> obtenerId(String nombre, String clave, boolean activo) throws SQLException {
+        List<UsuarioDB> usuarios = new LinkedList<>();
+        try (Connection conn = ConectaDB.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(FIND_BY_CREDENTIALS_QUERY)) {
+
+            pstmt.setString(1, nombre);
+            pstmt.setString(2, clave);
+            pstmt.setBoolean(3, activo);
+
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    usuarios.add(mapResultSetToUsuario(rs));
+                }
+            }
+        }
+        return usuarios;
+    }
+
+    /**
+     * Mapea la fila actual de un ResultSet a un objeto UsuarioDB.
+     */
+    private UsuarioDB mapResultSetToUsuario(ResultSet rs) throws SQLException {
+        // Asumiendo que el constructor de UsuarioDB es (long, String, String, boolean, int)
+        // y que las columnas están en ese orden.
+        return new UsuarioDB(
+                rs.getLong(1),
+                rs.getString(2),
+                rs.getString(3),
+                rs.getBoolean(4),
+                rs.getInt(5)
+        );
+    }
 }

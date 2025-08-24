@@ -5,142 +5,145 @@
  */
 package com.xlogant.acciones;
 
-import com.xlogant.conecta.ConectaDB;
-import com.xlogant.controlador.ControlDeMenu;
+import java.awt.Dimension;
 import java.awt.Point;
-import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.Serial;
 import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.JDesktopPane;
 import javax.swing.JInternalFrame;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
-
-import static java.awt.Toolkit.*;
-import static java.lang.Class.forName;
-import static java.lang.System.out;
-import static javax.swing.JOptionPane.*;
+import javax.swing.SwingWorker;
 
 /**
+ * Un ActionListener que carga y muestra dinámicamente un JInternalFrame
+ * dentro de un JDesktopPane basado en una búsqueda en la base de datos.
+ * Previene la creación de formularios duplicados y realiza las operaciones
+ * de base de datos fuera del Hilo de Despacho de Eventos (EDT) para mantener
+ * la UI responsiva.
  *
  * @author oscar
  */
- public class accionaFormulario implements ActionListener, Serializable {
-
-    public accionaFormulario(JDesktopPane desktop) {
-        paneDesktop = desktop;
-    }
-
-    @Override public void actionPerformed(ActionEvent e) {
-        try {
-            var sender = e.getActionCommand();
-            var obj = e.getSource();
-            if (obj instanceof JMenuItem menux) {
-                showInternalMessageDialog(this.paneDesktop, sender, "Aqui", INFORMATION_MESSAGE);
-                elItem = menux;
-                conectaItem = ConectaDB.obtenerConexion();
-                pidmenu = conectaItem.prepareStatement(CONSULTAFORMULARIO);
-                pidmenu.setString(1, sender);
-                rmnuid = pidmenu.executeQuery();
-                while (rmnuid.next()) {
-                    var descripcion = rmnuid.getString(1);
-                    var url_submenus = rmnuid.getString(2);
-                    var clase = forName(url_submenus);
-                    var claseCarga = clase.getSimpleName();
-                    var userConstructor = clase.getConstructor();
-                    if (d == null) {
-                        elItem.setEnabled(false);
-                        d = (JInternalFrame) userConstructor.newInstance();
-                        var pantalla = getDefaultToolkit().getScreenSize();
-                        var ventana = d.getSize();
-                        var x = ((pantalla.width - ventana.width) / 2);
-                        var y = ((pantalla.height - ventana.height) / 2);
-                        d.setLocation(new Point(x, y));
-                        d.setVisible(true);
-                        d.moveToFront();
-                        d.toFront();
-                        d.getFocusOwner();
-                        d.repaint();
-                        d.revalidate();
-                        paneDesktop.add(d);
-                    } else if (d != null) {
-                        d = null;
-                        if (pidmenu != null) {
-                            ConectaDB.cerrarPreparaStatement(pidmenu);
-                        }
-                        if (rmnuid != null) {
-                            ConectaDB.cerrarResultSet(rmnuid);
-                        }
-                        if (conectaItem != null) {
-                            ConectaDB.cerrarConexion(conectaItem);
-                        }
-                        elItem.setEnabled(false);
-                        if (d == null) {
-                            elItem.setEnabled(false);
-                            var g = (d == null);
-                            out.println("Cerrado correctamente " + g);
-                            d = (JInternalFrame) userConstructor.newInstance();
-                            paneDesktop.add(d);
-                            var pantalla = getDefaultToolkit().getScreenSize();
-                            var ventana = d.getSize();
-                            var x = ((pantalla.width - ventana.width) / 2);
-                            var y = ((pantalla.height - ventana.height) / 2);
-                            d.moveToFront();
-                            d.toFront();
-                            d.getFocusOwner();
-                            d.setLocation(new Point(x, y));
-                            d.setVisible(true);
-                            d.revalidate();
-                            d.repaint();
-                            if (pidmenu != null) {
-                                ConectaDB.cerrarPreparaStatement(pidmenu);
-                            }
-                            if (rmnuid != null) {
-                                ConectaDB.cerrarResultSet(rmnuid);
-                            }
-                            if (conectaItem != null) {
-                                ConectaDB.cerrarConexion(conectaItem);
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (SQLException | ClassNotFoundException | NoSuchMethodException | SecurityException | InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
-            Logger.getLogger(ControlDeMenu.class.getName()).log(Level.SEVERE, null, ex);
-            out.println(ex.getCause());
-            out.println(ex.getLocalizedMessage());
-        } finally {
-            if (pidmenu != null) {
-                ConectaDB.cerrarPreparaStatement(pidmenu);
-            }
-            if (rmnuid != null) {
-                ConectaDB.cerrarResultSet(rmnuid);
-            }
-            if (conectaItem != null) {
-                ConectaDB.cerrarConexion(conectaItem);
-            }
-        }
-    }
+public class accionaFormulario implements ActionListener, Serializable {
 
     @Serial
-    static final private long serialVersionUID = -2570927168571265260L;
-    final private JDesktopPane paneDesktop;
-    private JInternalFrame d;
-    static public JMenuItem elItem;
-    static private Connection conectaItem;
-    static private PreparedStatement pidmenu;
-    static private ResultSet rmnuid;
-    static final private String CONSULTAFORMULARIO = "SELECT descripcion_submenu, url_submenu "
-            + "FROM submenu_principal  "
-            + "WHERE nombre_submenu= ?";
+    private static final long serialVersionUID = -2570927168571265260L;
+    private static final Logger LOGGER = Logger.getLogger(accionaFormulario.class.getName());
 
+    private final JDesktopPane desktopPane;
+    private final FormLoaderService formLoader;
+
+    public accionaFormulario(JDesktopPane desktop) {
+        if (desktop == null) {
+            throw new IllegalArgumentException("El JDesktopPane no puede ser nulo.");
+        }
+        this.desktopPane = desktop;
+        this.formLoader = new FormLoaderService();
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if (!(e.getSource() instanceof JMenuItem menuItem)) {
+            return; // No es un JMenuItem, no hacer nada.
+        }
+
+        String formName = e.getActionCommand();
+        if (formName == null || formName.isBlank()) {
+            LOGGER.warning("El comando de acción del menú está vacío.");
+            return;
+        }
+
+        // Deshabilitar el menú para prevenir dobles clics mientras se carga.
+        menuItem.setEnabled(false);
+
+        // Usar SwingWorker para realizar la búsqueda en la BD fuera del EDT.
+        new SwingWorker<Optional<String>, Void>() {
+            @Override
+            protected Optional<String> doInBackground() {
+                // La única operación lenta (acceso a BD) se hace aquí.
+                return formLoader.getFormClassName(formName);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Optional<String> classNameOpt = get();
+
+                    if (classNameOpt.isEmpty() || classNameOpt.get().isBlank()) {
+                        showError("No se pudo encontrar la configuración para el formulario: " + formName);
+                        return;
+                    }
+
+                    String className = classNameOpt.get();
+
+                    // --- Toda la lógica de UI se ejecuta ahora en el EDT ---
+
+                    // 1. Verificar si ya existe una instancia de este frame.
+                    for (JInternalFrame frame : desktopPane.getAllFrames()) {
+                        if (frame.getClass().getName().equals(className)) {
+                            // Si el frame fue cerrado, lo removemos para crear uno nuevo.
+                            if (frame.isClosed()) {
+                                desktopPane.remove(frame);
+                                break; // Salir del bucle para proceder a la creación.
+                            }
+
+                            // Si ya existe y está abierto, lo traemos al frente.
+                            if (frame.isIcon()) {
+                                desktopPane.getDesktopManager().deiconifyFrame(frame);
+                            }
+                            frame.moveToFront();
+                            frame.setSelected(true);
+                            return; // Tarea completada.
+                        }
+                    }
+
+                    // 2. Si no se encontró un frame abierto, crear uno nuevo.
+                    Class<?> frameClass = Class.forName(className);
+                    JInternalFrame newFrame = (JInternalFrame) frameClass.getConstructor().newInstance();
+
+                    // 3. Añadir y mostrar el nuevo frame.
+                    desktopPane.add(newFrame);
+                    centerFrame(newFrame);
+                    newFrame.setVisible(true);
+                    newFrame.moveToFront();
+                    newFrame.setSelected(true);
+
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "Fallo al cargar o mostrar el formulario: " + formName, ex);
+                    // Usar ex.getCause() puede dar un mensaje más específico.
+                    Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                    showError("Error al cargar el formulario: " + cause.getMessage());
+                } finally {
+                    // Siempre volver a habilitar el menú.
+                    menuItem.setEnabled(true);
+                }
+            }
+
+            private void showError(String message) {
+                JOptionPane.showMessageDialog(
+                        desktopPane,
+                        message,
+                        "Error de Carga",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+
+            private void centerFrame(JInternalFrame frame) {
+                Dimension desktopSize = desktopPane.getSize();
+                Dimension frameSize = frame.getSize();
+                int x = (desktopSize.width - frameSize.width) / 2;
+                int y = (desktopSize.height - frameSize.height) / 2;
+                // Asegurarse de que el frame no se posicione fuera de la pantalla si es muy grande.
+                x = Math.max(0, x);
+                y = Math.max(0, y);
+                frame.setLocation(new Point(x, y));
+            }
+
+        }.execute();
+    }
 }

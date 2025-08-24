@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.xlogant.controlador;
 
 import com.digitalpersona.onetouch.DPFPFingerIndex;
@@ -11,19 +6,9 @@ import com.xlogant.principal.CentroPrincipal;
 
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Savepoint;
-import java.sql.Statement;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.time.LocalDateTime;
-import java.util.EnumMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.imageio.ImageIO;
@@ -34,422 +19,550 @@ import static javax.swing.JOptionPane.INFORMATION_MESSAGE;
 import static javax.swing.JOptionPane.showInternalMessageDialog;
 
 /**
+ * Controlador para la creación y gestión de usuarios del sistema.
+ * Maneja la creación completa de usuarios incluyendo datos personales,
+ * autenticación, huellas dactilares y permisos.
+ * 
  * @author oscar
  */
-final public class ControlCrearUsuario implements Serializable {
+public final class ControlCrearUsuario implements Serializable {
+    
+    private static final Logger LOGGER = Logger.getLogger(ControlCrearUsuario.class.getName());
+    private static final boolean ACTIVOS = true;
+    
+    @Serial
+    private static final long serialVersionUID = 3434091817377493717L;
+    
+    // Constantes para queries SQL
+    private static final String CONSULTA_ROLES = 
+        "SELECT cu.id_role, cr.nombre_role FROM control_roles cr " +
+        "INNER JOIN control_usuario cu ON cu.id_control_us = cr.id_role_control " +
+        "WHERE cu.status_role = true ORDER BY cu.id_role ASC LIMIT 10 OFFSET 1";
+        
+    private static final String CONSULTA_MENU = 
+        "SELECT id_menu, nombre_menu FROM menu_principal";
+        
+    private static final String CONSULTA_SUBMENU = 
+        "SELECT id_submenu, nombre_submenu FROM submenu_principal";
+        
+    private static final String CONSULTA_EMPRESA = 
+        "SELECT ce.id_empresa, de.razon_social FROM datos_empresa de " +
+        "INNER JOIN control_empresa ce ON ce.id_empresa = de.id_empresa " +
+        "WHERE ce.estatus_empresa = true";
+        
+    private static final String CONSULTA_NOMBRE_USUARIO = 
+        "SELECT usuario_nombre FROM datos_usuario WHERE usuario_nombre = ?";
+        
+    private static final String CONSULTA_NUMERO_EMPLEADO = 
+        "SELECT numero_emp FROM datos_usuarios WHERE numero_emp = ?";
+        
+    private static final String INSERTAR_DATOS_USUARIO = 
+        "INSERT INTO datos_usuarios(nombre, apellido_pat, apellido_mat, direccion_us, " +
+        "telefono, celular, email, foto_usuario, fecha_ingreso, numero_emp, " +
+        "id_empresa, id_sucursal, rfid) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        
+    private static final String INSERTAR_USUARIO_LOCAL = 
+        "INSERT INTO datos_usuario(usuario_nombre, clave_usuario, status_de_usuario, id_role) " +
+        "VALUES(?, ?, ?, ?)";
+        
+    private static final String INSERTAR_HUELLA = 
+        "INSERT INTO control_huellas(id_usuario, identificador_huella, huella_reg, fecha_ins) " +
+        "VALUES(?, ?, ?, ?)";
+        
+    private static final String CONSULTA_ID_EMPLEADO = 
+        "SELECT dus.id_ctrol_usuario FROM datos_usuarios dus WHERE dus.numero_emp = ?";
+        
+    private static final String INSERTAR_CONTROL_MENU = 
+        "INSERT INTO control_menu(id_usuario, id_role, id_menu, estatus_menu) " +
+        "VALUES(?, ?, ?, ?)";
+        
+    private static final String CONSULTA_MENU_POR_ROL = 
+        "SELECT mp.id_menu, mp.nombre_menu, vm.estatus_menu FROM vista_menu vm " +
+        "INNER JOIN menu_principal mp ON vm.id_ctrol_menu = mp.id_menu " +
+        "WHERE vm.id_role = ? ORDER BY vm.id_menu, vm.id_role, vm.id_ctrol_menu ASC";
+        
+    private static final String CONSULTA_SUBMENUS_BASE = 
+        "SELECT DISTINCT id_role, id_menu, id_submenu, estatus_submenus " +
+        "FROM permisos_menu WHERE id_role = ? ORDER BY id_role, id_menu, id_submenu ASC";
+        
+    private static final String INSERTAR_SUBMENU = 
+        "INSERT INTO control_submenu(id_role, id_menu, id_submenu, estatus_submenus, id_usuario) " +
+        "VALUES(?, ?, ?, ?, ?)";
+        
+    private static final String CONSULTA_EMPRESA_ACTIVA = 
+        "SELECT ce.id_empresa, de.razon_social, ce.estatus_empresa, ds.id_sucursal, " +
+        "ds.nombre_sucursal, csc.estatus_suc FROM datos_empresa de " +
+        "INNER JOIN control_empresa ce ON ce.id_empresa = de.id_empresa " +
+        "INNER JOIN datos_sucursal ds ON ds.id_empresa = de.id_empresa " +
+        "INNER JOIN control_suc csc ON csc.id_suc = ds.id_sucursal " +
+        "INNER JOIN datos_usuarios dus ON dus.id_empresa = ce.id_empresa " +
+        "INNER JOIN datos_usuario du ON du.id_dato_control = dus.id_ctrol_usuario " +
+        "WHERE du.usuario_nombre = ? AND du.status_de_usuario = ? " +
+        "AND ce.estatus_empresa = ? AND csc.estatus_suc = ?";
+        
+    private static final String CONSULTA_SUCURSALES = 
+        "SELECT ce.id_empresa, de.razon_social, ce.estatus_empresa, ds.id_sucursal, " +
+        "ds.nombre_sucursal, csc.estatus_suc FROM datos_empresa de " +
+        "INNER JOIN control_empresa ce ON ce.id_empresa = de.id_empresa " +
+        "INNER JOIN datos_sucursal ds ON ds.id_empresa = de.id_empresa " +
+        "INNER JOIN control_suc csc ON csc.id_suc = ds.id_sucursal " +
+        "INNER JOIN datos_usuarios dus ON dus.id_empresa = ce.id_empresa " +
+        "INNER JOIN datos_usuario du ON du.id_dato_control = dus.id_ctrol_usuario " +
+        "WHERE ce.id_empresa = ? AND du.status_de_usuario = ? " +
+        "AND ce.estatus_empresa = ? AND csc.estatus_suc = ?";
 
-    static public Map<String, Integer> obtenerRoles() {
-        Map<String, Integer> mapaEstados = new TreeMap<>();
-        var conectando = obtenerConexion();
-        try (conectando) {
-            try (var preparesta = conectando.prepareStatement(CONSULTAROLES)) {
-                try (var resultados = preparesta.executeQuery()) {
-                    while (resultados.next()) {
-                        var ides = resultados.getInt(1);
-                        var nombreRoles = resultados.getString(2);
-                        mapaEstados.put(nombreRoles, ides);
-                        
-                    }
-                    if (mapaEstados.isEmpty()) {
-                        System.out.println("No se cargaron los registros");
-                        return null;
-                    } else {
-                        return mapaEstados;
-                    }
-                }
+    /**
+     * Obtiene el mapa de roles disponibles en el sistema.
+     * @return Map con nombre del rol como clave y ID como valor, null si hay error
+     */
+    public static Map<String, Integer> obtenerRoles() {
+        Map<String, Integer> roles = new TreeMap<>();
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(CONSULTA_ROLES);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            while (rs.next()) {
+                int idRol = rs.getInt(1);
+                String nombreRol = rs.getString(2);
+                roles.put(nombreRol, idRol);
             }
+            
+            if (roles.isEmpty()) {
+                LOGGER.warning("No se encontraron roles en el sistema");
+            }
+            
+            return roles.isEmpty() ? null : roles;
+            
         } catch (SQLException ex) {
-            Logger.getLogger(ControlCrearUsuario.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
+            manejarExcepcionSQL("Error al obtener roles", ex);
             return null;
         }
     }
 
+    /**
+     * Obtiene la lista de menús disponibles en el sistema.
+     * @return Map con nombre del menú como clave y ID como valor, null si hay error
+     */
     public static Map<String, Integer> listaMenu() {
-        Map<String, Integer> listadeMenu = new TreeMap<>();
-        var conec = obtenerConexion();
-        try (conec) {
-            try (var ppst = conec.prepareStatement(CONSULTAMENU)) {
-                try (var res = ppst.executeQuery();) {
-                    return getStringIntegerMap(res, listadeMenu);
-                }
-            }
+        Map<String, Integer> menus = new TreeMap<>();
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(CONSULTA_MENU);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            return obtenerMapaStringInteger(rs, menus);
+            
         } catch (SQLException ex) {
-            Logger.getLogger(ControlCrearUsuario.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
+            manejarExcepcionSQL("Error al obtener menús", ex);
             return null;
         }
     }
 
-    private static Map<String, Integer> getStringIntegerMap(ResultSet res, Map<String, Integer> listadeMenu) throws SQLException {
-        while (res.next()) {
-            var IDMENU = res.getInt(1);
-            var nomMenu = res.getString(2);
-            listadeMenu.put(nomMenu, IDMENU);
+    /**
+     * Método auxiliar para convertir ResultSet a Map<String, Integer>.
+     */
+    private static Map<String, Integer> obtenerMapaStringInteger(ResultSet rs, Map<String, Integer> mapa) throws SQLException {
+        while (rs.next()) {
+            int id = rs.getInt(1);
+            String nombre = rs.getString(2);
+            mapa.put(nombre, id);
         }
-        if (listadeMenu.isEmpty()) {
-            System.out.println("No se cargaron los registros");
+        
+        if (mapa.isEmpty()) {
+            LOGGER.warning("No se encontraron registros");
             return null;
-        } else {
-            return listadeMenu;
         }
+        
+        return mapa;
     }
 
+    /**
+     * Obtiene la lista de submenús disponibles en el sistema.
+     * @return Map con nombre del submenú como clave y ID como valor, null si hay error
+     */
     public static Map<String, Integer> listaSubmenu() {
-        Map<String, Integer> listaSubmenus = new TreeMap<>();
-        var con = obtenerConexion();
-        try (var prepare = con.prepareStatement(CONSULTASUBMENU);
-             var rest = prepare.executeQuery();) {
-            return getStringIntegerMap(rest, listaSubmenus);
+        Map<String, Integer> submenus = new TreeMap<>();
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(CONSULTA_SUBMENU);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            return obtenerMapaStringInteger(rs, submenus);
+            
         } catch (SQLException ex) {
-            Logger.getLogger(ControlCrearUsuario.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
+            manejarExcepcionSQL("Error al obtener submenús", ex);
             return null;
         }
     }
 
+    /**
+     * Método para manejar excepciones SQL de forma centralizada.
+     */
+    private static void manejarExcepcionSQL(String mensaje, SQLException ex) {
+        LOGGER.log(Level.SEVERE, mensaje, ex);
+        String errorMsg = mensaje + ": " + ex.getLocalizedMessage();
+        System.err.println(errorMsg);
+        showInternalMessageDialog(CentroPrincipal.jDesktopPane1, errorMsg, "Error de Base de Datos", INFORMATION_MESSAGE);
+    }
+    
+    /**
+     * Obtiene la lista de empresas disponibles en el sistema.
+     * @return Map con razón social como clave y ID como valor, null si hay error
+     */
     public static Map<String, Long> listaEmpresa() {
-        ListaLasEmpresas = new TreeMap<>();
-        var conecta = obtenerConexion();
-        try (conecta;
-             var ps = conecta.prepareStatement(CONSULTAEMPRESA);
-             var resulta = ps.executeQuery();) {
-            while (resulta.next()) {
-                var id_emp = resulta.getLong(1);
-                var razon = resulta.getString(2);
-                ListaLasEmpresas.put(razon, id_emp);
+        Map<String, Long> empresas = new TreeMap<>();
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(CONSULTA_EMPRESA);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            while (rs.next()) {
+                long idEmpresa = rs.getLong(1);
+                String razonSocial = rs.getString(2);
+                empresas.put(razonSocial, idEmpresa);
             }
-            if (ListaLasEmpresas.isEmpty()) {
-                System.out.println("No se cargaron los registros de la empresa");
+            
+            if (empresas.isEmpty()) {
+                LOGGER.warning("No se encontraron empresas registradas");
                 return null;
-            } else {
-                return ListaLasEmpresas;
             }
+            
+            return empresas;
+            
         } catch (SQLException ex) {
-            Logger.getLogger(ControlCrearUsuario.class.getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
+            manejarExcepcionSQL("Error al obtener empresas", ex);
             return null;
         }
     }
 
-    public static boolean controlaNombre(String nombres) {
-        var encontrar = false;
-        if (nombres.isBlank()) {
-            System.out.println("El campo nombre esta vacío");
+    /**
+     * Valida si un nombre de usuario ya existe en el sistema.
+     * @param nombreUsuario Nombre de usuario a validar
+     * @return true si el usuario existe, false si no existe o hay error
+     */
+    public static boolean validarNombreUsuario(String nombreUsuario) {
+        if (nombreUsuario == null || nombreUsuario.isBlank()) {
+            LOGGER.warning("El nombre de usuario está vacío");
             return false;
-        } else {
-            var cnt = obtenerConexion();
-            try (cnt;
-                 var pt = cnt.prepareStatement(CONSULTANOMBRE);) {
-                pt.setString(1, nombres);
-                try (var rt = pt.executeQuery();) {
-                    while (rt.next()) {
-                        elNombreUsuario = rt.getString(1);
-                        encontrar = rt.wasNull();
-                    }
-                    System.out.printf("El resultado esta vacio: %b%n", encontrar);
-                    return (nombres.equals(elNombreUsuario));
-                }
-            } catch (SQLException ex) {
-                Logger.getLogger(ControlCrearUsuario.class.getName()).log(Level.SEVERE, null, ex);
-                System.out.println("Error: " + ex.getLocalizedMessage());
-                showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
-                return false;
-            }
         }
-    }
-
-    public static boolean controlaNumeroEmp(String unNumEmp) {
-        if (unNumEmp.isBlank()) {
-            System.out.println("El campo número de empleado esta vacío");
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(CONSULTA_NOMBRE_USUARIO)) {
+            
+            stmt.setString(1, nombreUsuario);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                boolean existe = rs.next();
+                String usuarioEncontrado = existe ? rs.getString(1) : null;
+                
+                LOGGER.info(String.format("Validación de usuario '%s': %s", 
+                    nombreUsuario, existe ? "existe" : "no existe"));
+                    
+                return nombreUsuario.equals(usuarioEncontrado);
+            }
+            
+        } catch (SQLException ex) {
+            manejarExcepcionSQL("Error al validar nombre de usuario", ex);
             return false;
-        } else {
-            var cont = obtenerConexion();
-            try (cont;
-                 var outprep = cont.prepareStatement(CONSULTANUMEMPLEADO);) {
-                outprep.setString(1, unNumEmp);
-                try (var requerido = outprep.executeQuery();) {
-                    while (requerido.next()) {
-                        elNumeroEmp = requerido.getString(1);
-                    }
-                    return unNumEmp.equals(elNumeroEmp);
-                }
-            } catch (SQLException ex) {
-                Logger.getLogger(ControlCrearUsuario.class.getName()).log(Level.SEVERE, null, ex);
-                System.out.println("Error: " + ex.getLocalizedMessage());
-                showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
-                return false;
-            }
         }
     }
 
-    public static void guardaEnBase(String nombrePersona, String apellidoPatPer, String apellidoMatPer, String direccionPersona,
-                                    String telefPersona, String celPersona, String mailPersona, LocalDateTime timedate, String numEmp, long IDMPRESA,
-                                    BufferedImage fotografia, String NombreUsuario, String clave, boolean status, int idrole,
-                                    long sucursalID, EnumMap<DPFPFingerIndex, DPFPTemplate> mpHuellas, String rfid) {
-        final int controlaId;
-        final boolean inserta, inserta1, inserta3;
-        System.out.println("El rol: -------------------============================================>>>>>>>>>>>   " + idrole);
-
-        boolean checa;
-        switch (idrole) {
-            case 2 -> {
-                System.out.println("el roleeeeeeeeeeeeeeeeee: " + idrole);
-                inserta = insertaDatosUsuario(nombrePersona, apellidoPatPer, apellidoMatPer, direccionPersona,
-                        telefPersona, celPersona, mailPersona, fotografia, numEmp, IDMPRESA,
-                        NombreUsuario, clave, status, idrole, sucursalID, rfid);
-                if (inserta) {
-                    System.out.println("Datos usuario ingresados correctamente---------------> " + inserta);
-                    inserta1 = insertaUsuario(NombreUsuario, clave, status, idrole);
-                    if (inserta1) {
-                        System.out.println("Campos especificos del usuario guardado " + inserta1);
-                        controlaId = devuelveID(numEmp);
-                        if (controlaId != 0) {
-                            System.out.println("Obteniedo el id: " + controlaId);
-                            System.out.println("El Role: " + idrole);
-                            /////////////////////////////////////////////////////////
-                            checa = insertaHuellasDB(controlaId, mpHuellas);
-                            System.out.println("Guardando huellas: " + checa);
-                            /////////////////////////////////////////////////////////
-                            if (checa) {
-                                inserta3 = integraUsuario(controlaId, idrole);
-                                if (inserta3) {
-                                    System.out.println("Permisos agregados");
-                                    devuelveSubmenusEnBase(idrole, controlaId);
-                                    /*if (inserta4) {
-                                    System.out.println("Permisos submenus agredados");
-                                    } else {
-                                    System.out.println("No se agregaron los submenus");
-                                    }*/
-                                } else {
-                                    System.out.println("No se agregaron los permisos");
-                                }
-                            } else {
-                                System.out.println("No se guardaron la huellas");
-                            }
-                        } else {
-                            System.out.println("Error al devolver el id del usuario");
-                        }
-                    } else {
-                        System.out.println("No se efectuo la operacion 2");
-                    }
-                } else {
-                    System.out.println("No se efectuo la operacion 1");
+    /**
+     * Valida si un número de empleado ya existe en el sistema.
+     * @param numeroEmpleado Número de empleado a validar
+     * @return true si el número existe, false si no existe o hay error
+     */
+    public static boolean validarNumeroEmpleado(String numeroEmpleado) {
+        if (numeroEmpleado == null || numeroEmpleado.isBlank()) {
+            LOGGER.warning("El número de empleado está vacío");
+            return false;
+        }
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(CONSULTA_NUMERO_EMPLEADO)) {
+            
+            stmt.setString(1, numeroEmpleado);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                String numeroEncontrado = null;
+                if (rs.next()) {
+                    numeroEncontrado = rs.getString(1);
                 }
+                
+                LOGGER.info(String.format("Validación de empleado '%s': %s", 
+                    numeroEmpleado, numeroEncontrado != null ? "existe" : "no existe"));
+                    
+                return numeroEmpleado.equals(numeroEncontrado);
             }
-            case 3, 4, 5, 6, 7, 8, 9, 10 -> {
-                System.out.println("el roleeeeeeeeeeeeeeeeee: " + idrole);
-                inserta = insertaDatosUsuario(nombrePersona, apellidoPatPer, apellidoMatPer, direccionPersona,
-                        telefPersona, celPersona, mailPersona, fotografia, numEmp, IDMPRESA,
-                        NombreUsuario, clave, status, idrole, sucursalID, rfid);
-                if (inserta) {
-                    System.out.println("Datos usuario ingresados correctamente " + inserta);
-                    inserta1 = insertaUsuario(NombreUsuario, clave, status, idrole);
-                    if (inserta1) {
-                        System.out.println("Campos especificos del usuario guardado " + inserta1);
-                        controlaId = devuelveID(numEmp);
-                        if (controlaId != 0) {
-                            System.out.println("Obteniedo el id: " + controlaId);
-                            System.out.println("El Role: " + idrole);
-                            checa = insertaHuellasDB(controlaId, mpHuellas);
-                            if (checa) {
-                                inserta3 = integraUsuario(controlaId, idrole);
-                                if (inserta3) {
-                                    System.out.println("Permisos agregados");
-                                    devuelveSubmenusEnBase(idrole, controlaId);
-                                    /*if (inserta4) {
-                                    System.out.println("Permisos submenus agredados");
-                                    } else {
-                                    System.out.println("No se agregaron los submenus");
-                                    }*/
-                                } else {
-                                    System.out.println("No se agregaron los permisos");
-                                }
-                            } else {
-                                System.out.println("No se guardaron la huellas");
-                            }
-                        } else {
-                            System.out.println("Error al devolver el id del usuario");
-                        }
-                    } else {
-                        System.out.println("No se efectuo la operacion 2");
-                    }
-                } else {
-                    System.out.println("No se efectuo la operacion 1");
-                }
-            }
-            default -> System.out.println("Usuario terminado....................");
+            
+        } catch (SQLException ex) {
+            manejarExcepcionSQL("Error al validar número de empleado", ex);
+            return false;
         }
     }
 
-    private static boolean insertaDatosUsuario(String nom, String apellidoPat,
-                                               String apellidoMat, String direc, String telef, String cel,
-                                               String mail, BufferedImage imagen, String numEmpleado,
-                                               long IDEMP, String nomus, String pass, boolean sta, long rol, long sucID, String RFID) {
-        LocalDateTime fecha = LocalDateTime.now();
+    /**
+     * Clase interna para encapsular los datos del usuario.
+     */
+    public static class DatosUsuario {
+        public final String nombre;
+        public final String apellidoPaterno;
+        public final String apellidoMaterno;
+        public final String direccion;
+        public final String telefono;
+        public final String celular;
+        public final String email;
+        public final BufferedImage fotografia;
+        public final String numeroEmpleado;
+        public final long idEmpresa;
+        public final String nombreUsuario;
+        public final String clave;
+        public final boolean activo;
+        public final int idRol;
+        public final long idSucursal;
+        public final EnumMap<DPFPFingerIndex, DPFPTemplate> huellas;
+        public final String rfid;
+        
+        public DatosUsuario(String nombre, String apellidoPaterno, String apellidoMaterno,
+                           String direccion, String telefono, String celular, String email,
+                           BufferedImage fotografia, String numeroEmpleado, long idEmpresa,
+                           String nombreUsuario, String clave, boolean activo, int idRol,
+                           long idSucursal, EnumMap<DPFPFingerIndex, DPFPTemplate> huellas,
+                           String rfid) {
+            this.nombre = nombre;
+            this.apellidoPaterno = apellidoPaterno;
+            this.apellidoMaterno = apellidoMaterno;
+            this.direccion = direccion;
+            this.telefono = telefono;
+            this.celular = celular;
+            this.email = email;
+            this.fotografia = fotografia;
+            this.numeroEmpleado = numeroEmpleado;
+            this.idEmpresa = idEmpresa;
+            this.nombreUsuario = nombreUsuario;
+            this.clave = clave;
+            this.activo = activo;
+            this.idRol = idRol;
+            this.idSucursal = idSucursal;
+            this.huellas = huellas;
+            this.rfid = rfid;
+        }
+    }
+    
+    /**
+     * Crea un usuario completo en el sistema con todos sus datos y permisos.
+     * @param datos Objeto que encapsula todos los datos del usuario
+     * @return true si el usuario se creó exitosamente, false en caso contrario
+     */
+    public static boolean crearUsuario(DatosUsuario datos) {
+        LOGGER.info(String.format("Iniciando creación de usuario con rol: %d", datos.idRol));
+        
+        // Validar que el rol esté en el rango permitido
+        if (datos.idRol < 2 || datos.idRol > 10) {
+            LOGGER.warning(String.format("Rol no válido: %d", datos.idRol));
+            return false;
+        }
+        
         try {
-            ByteArrayOutputStream byatos = new ByteArrayOutputStream();
-            ImageIO.write(imagen, "jpg", byatos);
-            ByteArrayInputStream inputStream = new ByteArrayInputStream(byatos.toByteArray());
-            Timestamp t = Timestamp.valueOf(fecha);
-            try (var conectando = obtenerConexion()) {
-                try (conectando; var prepare = conectando.prepareStatement(DATOSUSUARIO);) {
-                    prepare.setString(1, nom);
-                    prepare.setString(2, apellidoPat);
-                    prepare.setString(3, apellidoMat);
-                    prepare.setString(4, direc);
-                    prepare.setString(5, telef);
-                    prepare.setString(6, cel);
-                    prepare.setString(7, mail);
-                    prepare.setBinaryStream(8, inputStream, inputStream.available());
-                    prepare.setTimestamp(9, t);
-                    prepare.setString(10, numEmpleado);
-                    prepare.setLong(11, IDEMP);
-                    prepare.setLong(12, sucID);
-                    prepare.setString(13, RFID);
-                    int integra = prepare.executeUpdate();
-                    spt1 = conectando.setSavepoint("Punto1");
-                    cerrarCommit(conectando);
-                    return (integra == 1);
-                }
+            // 1. Insertar datos personales del usuario
+            if (!insertarDatosPersonales(datos)) {
+                LOGGER.severe("Error al insertar datos personales del usuario");
+                return false;
             }
+            LOGGER.info("Datos personales insertados correctamente");
+            
+            // 2. Insertar datos de autenticación
+            if (!insertarDatosAutenticacion(datos)) {
+                LOGGER.severe("Error al insertar datos de autenticación");
+                return false;
+            }
+            LOGGER.info("Datos de autenticación insertados correctamente");
+            
+            // 3. Obtener ID del usuario recién creado
+            int idUsuario = obtenerIdUsuario(datos.numeroEmpleado);
+            if (idUsuario == 0) {
+                LOGGER.severe("Error al obtener el ID del usuario creado");
+                return false;
+            }
+            LOGGER.info(String.format("ID de usuario obtenido: %d", idUsuario));
+            
+            // 4. Guardar huellas dactilares
+            if (!guardarHuellasDactilares(idUsuario, datos.huellas)) {
+                LOGGER.severe("Error al guardar huellas dactilares");
+                return false;
+            }
+            LOGGER.info("Huellas dactilares guardadas correctamente");
+            
+            // 5. Asignar permisos de menú
+            if (!asignarPermisosMenu(idUsuario, datos.idRol)) {
+                LOGGER.severe("Error al asignar permisos de menú");
+                return false;
+            }
+            LOGGER.info("Permisos de menú asignados correctamente");
+            
+            // 6. Asignar permisos de submenú
+            asignarPermisosSubmenu(datos.idRol, idUsuario);
+            LOGGER.info("Permisos de submenú asignados correctamente");
+            
+            LOGGER.info(String.format("Usuario '%s' creado exitosamente con ID: %d", 
+                datos.nombreUsuario, idUsuario));
+            return true;
+            
+        } catch (Exception ex) {
+            LOGGER.log(Level.SEVERE, "Error inesperado al crear usuario", ex);
+            return false;
+        }
+    }
+
+    /**
+     * Inserta los datos personales del usuario en la base de datos.
+     */
+    private static boolean insertarDatosPersonales(DatosUsuario datos) {
+        LocalDateTime fechaActual = LocalDateTime.now();
+        
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            ImageIO.write(datos.fotografia, "jpg", baos);
+            
+            try (ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+                 Connection conn = obtenerConexion();
+                 PreparedStatement stmt = conn.prepareStatement(INSERTAR_DATOS_USUARIO)) {
+                
+                stmt.setString(1, datos.nombre);
+                stmt.setString(2, datos.apellidoPaterno);
+                stmt.setString(3, datos.apellidoMaterno);
+                stmt.setString(4, datos.direccion);
+                stmt.setString(5, datos.telefono);
+                stmt.setString(6, datos.celular);
+                stmt.setString(7, datos.email);
+                stmt.setBinaryStream(8, bais, bais.available());
+                stmt.setTimestamp(9, Timestamp.valueOf(fechaActual));
+                stmt.setString(10, datos.numeroEmpleado);
+                stmt.setLong(11, datos.idEmpresa);
+                stmt.setLong(12, datos.idSucursal);
+                stmt.setString(13, datos.rfid);
+                
+                int filasAfectadas = stmt.executeUpdate();
+                conn.commit();
+                
+                return filasAfectadas == 1;
+            }
+            
         } catch (SQLException | IOException ex) {
-            Logger.getLogger(ControlCrearUsuario.class
-                    .getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
-            System.exit(1);
-            try {
-                conectado.rollback(spt1);
-                rollback(conectado);
-            } catch (SQLException ex1) {
-                Logger.getLogger(ControlCrearUsuario.class
-                        .getName()).log(Level.SEVERE, null, ex1);
-                System.out.println("Error: " + ex1.getLocalizedMessage());
-                showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
-            }
+            manejarExcepcionSQL("Error al insertar datos personales", 
+                ex instanceof SQLException ? (SQLException) ex : new SQLException(ex));
             return false;
         }
     }
 
-    private static boolean insertaUsuario(String nomus, String pass,
-                                          boolean sta, long rol) {
-        var encriptado = getHash(pass, 5);
-        var cc = obtenerConexion();
-        try (cc; var pp = cc.prepareStatement(USUARIOLOCAL);) {
-            pp.setString(1, nomus);
-            pp.setString(2, encriptado);
-            pp.setBoolean(3, sta);
-            pp.setLong(4, rol);
-            var integrado = pp.executeUpdate();
-            cerrarCommit(cc);
-            return (integrado == 1);
+    /**
+     * Inserta los datos de autenticación del usuario.
+     */
+    private static boolean insertarDatosAutenticacion(DatosUsuario datos) {
+        String claveEncriptada = getHash(datos.clave, 5);
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(INSERTAR_USUARIO_LOCAL)) {
+            
+            stmt.setString(1, datos.nombreUsuario);
+            stmt.setString(2, claveEncriptada);
+            stmt.setBoolean(3, datos.activo);
+            stmt.setLong(4, datos.idRol);
+            
+            int filasAfectadas = stmt.executeUpdate();
+            conn.commit();
+            
+            return filasAfectadas == 1;
+            
         } catch (SQLException ex) {
-            Logger.getLogger(ControlCrearUsuario.class
-                    .getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
-            rollback(cc);
+            manejarExcepcionSQL("Error al insertar datos de autenticación", ex);
             return false;
         }
     }
 
-    private static boolean insertaHuellasDB(long UnidUs, EnumMap<DPFPFingerIndex, DPFPTemplate> unasHuellas) {
-        muestraID = UnidUs;
-        var ldt = LocalDateTime.now();
-        var ttr = Timestamp.valueOf(ldt);
-        var cnx = obtenerConexion();
-        try (cnx;
-             var pre = cnx.prepareStatement(INSERTAHUELLA);) {
-            unasHuellas.forEach((nom, h) -> {
+    /**
+     * Guarda las huellas dactilares del usuario en la base de datos.
+     */
+    private static boolean guardarHuellasDactilares(int idUsuario, EnumMap<DPFPFingerIndex, DPFPTemplate> huellas) {
+        LocalDateTime fechaActual = LocalDateTime.now();
+        Timestamp timestamp = Timestamp.valueOf(fechaActual);
+        
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(INSERTAR_HUELLA)) {
+            
+            for (Map.Entry<DPFPFingerIndex, DPFPTemplate> entrada : huellas.entrySet()) {
                 try {
-                    var rrs = (String) nom.toString();
-                    var datosHuella = new ByteArrayInputStream(h.serialize());
-                    var sizeHuella = h.serialize().length;
-                    pre.setLong(1, muestraID);
-                    pre.setString(2, rrs);
-                    pre.setBinaryStream(3, datosHuella, sizeHuella);
-                    pre.setTimestamp(4, ttr);
-                    pre.addBatch();
-                } catch (SQLException ex) {
-                    Logger.getLogger(ControlCrearUsuario.class
-                            .getName()).log(Level.SEVERE, null, ex);
-                    System.out.println("Error al guardar las huellas: " + ex.getLocalizedMessage());
-                    System.out.println("Error: " + ex.getSQLState());
-                    showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
+                    String identificadorDedo = entrada.getKey().toString();
+                    byte[] datosHuella = entrada.getValue().serialize();
+                    
+                    stmt.setInt(1, idUsuario);
+                    stmt.setString(2, identificadorDedo);
+                    stmt.setBinaryStream(3, new ByteArrayInputStream(datosHuella), datosHuella.length);
+                    stmt.setTimestamp(4, timestamp);
+                    stmt.addBatch();
+                    
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, "Error al procesar huella: " + entrada.getKey(), ex);
                 }
-            });
-            var logro = pre.executeBatch();
-            checaRegistro(logro);
-            var listados = List.of(logro);
-            listados.forEach(System.out::println);
-            cerrarCommit(cnx);
-            return checaVerdad(logro);
-        } catch (SQLException e) {
-            Logger.getLogger(ControlCrearUsuario.class
-                    .getName()).log(Level.SEVERE, null, e);
-            System.out.println("Error al guardar las huellas: " + e.getLocalizedMessage());
-            System.out.println("Error: " + e.getSQLState());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, e.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
-            rollback(cnx);
+            }
+            
+            int[] resultados = stmt.executeBatch();
+            conn.commit();
+            
+            return validarResultadosBatch(resultados);
+            
+        } catch (SQLException ex) {
+            manejarExcepcionSQL("Error al guardar huellas dactilares", ex);
             return false;
         }
     }
 
-    private static void checaRegistro(int[] cuenta) {
-        for (var id : cuenta) {
-            if (cuenta[id] >= 0) {
-                // Successfully executed; the number represents number of affected rows
-                System.out.println("OK: Total de insert=" + cuenta[id]);
-            } else if (cuenta[id] == Statement.SUCCESS_NO_INFO) {
-                // Successfully executed; number of affected rows not available
-                System.out.println("OK: Todos los registros ingresado");
-            } else if (cuenta[id] == Statement.EXECUTE_FAILED) {
-                System.out.println("No se pudierom ingresar los datos a la base");
+    /**
+     * Valida los resultados de una operación batch.
+     */
+    private static boolean validarResultadosBatch(int[] resultados) {
+        boolean exito = true;
+        int exitosos = 0;
+        int fallidos = 0;
+        
+        for (int resultado : resultados) {
+            if (resultado >= 0) {
+                exitosos++;
+                LOGGER.fine("Operación exitosa: " + resultado + " filas afectadas");
+            } else if (resultado == Statement.SUCCESS_NO_INFO) {
+                exitosos++;
+                LOGGER.fine("Operación exitosa: número de filas no disponible");
+            } else if (resultado == Statement.EXECUTE_FAILED) {
+                fallidos++;
+                exito = false;
+                LOGGER.warning("Operación fallida en batch");
             }
         }
-        /*for (var i = 0; i < cuenta.length; i++) {
-            if (cuenta[i] >= 0) {
-                // Successfully executed; the number represents number of affected rows
-                System.out.println("OK: Total de insert=" + cuenta[i]);
-            } else if (cuenta[i] == Statement.SUCCESS_NO_INFO) {
-                // Successfully executed; number of affected rows not available
-                System.out.println("OK: Todos los registros ingresado");
-            } else if (cuenta[i] == Statement.EXECUTE_FAILED) {
-                System.out.println("No se pudierom ingresar los datos a la base");
-            }
-        }*/
+        
+        LOGGER.info(String.format("Resultado batch: %d exitosos, %d fallidos", exitosos, fallidos));
+        return exito;
     }
 
-    private static boolean checaVerdad(int[] cuenta) {
-        for (var id : cuenta) {
-            return cuenta[id] > 0;
-        }
-        /*for (var i = 0; i < cuenta.length; i++) {
-            return cuenta[i] > 0;
-        }*/
-        return false;
-    }
 
-    private static int devuelveID(String numemp) {
-        var cdo = obtenerConexion();
-        try (cdo;
-             var pst = cdo.prepareStatement(CONSULTAIDEMPLEADO);) {
-            pst.setString(1, numemp);
-            ResultSet rset = pst.executeQuery();
-            if (rset.next()) {
-                devuelto = rset.getInt(1);
+    /**
+     * Obtiene el ID del usuario basado en su número de empleado.
+     */
+    private static int obtenerIdUsuario(String numeroEmpleado) {
+        try (Connection conn = obtenerConexion();
+             PreparedStatement stmt = conn.prepareStatement(CONSULTA_ID_EMPLEADO)) {
+            
+            stmt.setString(1, numeroEmpleado);
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
             }
-            return devuelto;
+            
+            return 0;
+            
         } catch (SQLException ex) {
-            Logger.getLogger(ControlCrearUsuario.class
-                    .getName()).log(Level.SEVERE, null, ex);
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            showInternalMessageDialog(CentroPrincipal.jDesktopPane1, ex.getLocalizedMessage(), "Monitor", INFORMATION_MESSAGE);
+            manejarExcepcionSQL("Error al obtener ID de usuario", ex);
             return 0;
         }
     }
@@ -639,30 +752,6 @@ final public class ControlCrearUsuario implements Serializable {
         }
     }
 
-    public static void checaRegistros(int[] cuentas) {
-        for (var id : cuentas) {
-            if (cuentas[id] >= 0) {
-                // Successfully executed; the number represents number of affected rows
-                System.out.println("OK: Total de insert=" + cuentas[id]);
-            } else if (cuentas[id] == Statement.SUCCESS_NO_INFO) {
-                // Successfully executed; number of affected rows not available
-                System.out.println("OK: Todos los registros ingresado");
-            } else if (cuentas[id] == Statement.EXECUTE_FAILED) {
-                System.out.println("No se pudierom ingresar los datos a la base");
-            }
-        }
-        /*for (var i = 0; i < cuentas.length; i++) {
-            if (cuentas[i] >= 0) {
-                // Successfully executed; the number represents number of affected rows
-                System.out.println("OK: Total de insert=" + cuentas[i]);
-            } else if (cuentas[i] == Statement.SUCCESS_NO_INFO) {
-                // Successfully executed; number of affected rows not available
-                System.out.println("OK: Todos los registros ingresado");
-            } else if (cuentas[i] == Statement.EXECUTE_FAILED) {
-                System.out.println("No se pudierom ingresar los datos a la base");
-            }
-        }*/
-    }
 
     public static Map<String, Long> listaEmpresaActiva(String nom) {
         ListaLasEmpresas = new TreeMap<>();

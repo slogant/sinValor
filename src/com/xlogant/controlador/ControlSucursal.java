@@ -1,8 +1,3 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package com.xlogant.controlador;
 
 import com.xlogant.conecta.ConectaDB;
@@ -16,181 +11,180 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
-
-import static com.xlogant.conecta.ConectaDB.*;
-import static java.sql.Timestamp.*;
-import static java.time.LocalDateTime.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
- *
+ * Clase de servicio (DAO) para gestionar las entidades Sucursal.
+ * <p>
+ * Esta clase es sin estado y utiliza métodos estáticos para interactuar con la base de datos.
+ * Todas las operaciones de base de datos gestionan sus propios recursos de forma segura
+ * y propagan las excepciones SQL para que sean manejadas por la capa de llamada.
+ * 
  * @author oscar
+ * @author oscar (refactored by Gemini)
  */
 public final class ControlSucursal implements Serializable {
 
-    public static Map<String, Long> sucursalesEmpresas(String nombre) {
-        try {
-            Map<String, Long> listame = new TreeMap<>();
-            conecta = obtenerConexion();
-            pstm = conecta.prepareStatement(CONSULTAEMPRESA);
-            pstm.setString(1, nombre);
-            pstm.setBoolean(2, ACT);
-            pstm.setBoolean(3, ACT);
-            pstm.setBoolean(4, ACT);
-            resultado = pstm.executeQuery();
-            while (resultado.next()) {
-                long idemp = resultado.getLong(1);
-                String nombreEmpresas = resultado.getString(2);
-                listame.put(nombreEmpresas, idemp);
+    @Serial
+    private static final long serialVersionUID = -5022490814788863707L;
+    private static final Logger LOGGER = Logger.getLogger(ControlSucursal.class.getName());
+    private static final boolean ACTIVO = true;
+
+    /**
+     * Obtiene un mapa de empresas activas asociadas a un usuario.
+     *
+     * @param nombreUsuario El nombre del usuario.
+     * @return Un mapa con el nombre de la empresa como clave y su ID como valor.
+     * @throws SQLException si ocurre un error de base de datos.
+     */
+    public static Map<String, Long> sucursalesEmpresas(String nombreUsuario) throws SQLException {
+        Map<String, Long> listaEmpresas = new TreeMap<>();
+        try (Connection conn = ConectaDB.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(CONSULTAEMPRESA)) {
+            pstmt.setString(1, nombreUsuario);
+            pstmt.setBoolean(2, ACTIVO);
+            pstmt.setBoolean(3, ACTIVO);
+            pstmt.setBoolean(4, ACTIVO);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    long idEmpresa = rs.getLong("id_empresa");
+                    String nombreEmpresa = rs.getString("razon_social");
+                    listaEmpresas.put(nombreEmpresa, idEmpresa);
+                }
             }
-            if (listame.isEmpty()) {
-                System.out.println("No se cargaron los registros de la empresa");
-                listame.put("Registro no encontrado", 0L);
-                return listame;
-            } else {
-                return listame;
+        }
+        if (listaEmpresas.isEmpty()) {
+            LOGGER.log(Level.WARNING, "No se encontraron empresas para el usuario: {0}", nombreUsuario);
+        }
+        return listaEmpresas;
+    }
+
+    /**
+     * Obtiene un mapa de los encargados (usuarios) para una empresa y rol específicos.
+     *
+     * @param roleId    El ID del rol a buscar.
+     * @param idEmpresa El ID de la empresa.
+     * @return Un mapa con el ID del usuario como clave y su nombre completo como valor.
+     * @throws SQLException si ocurre un error de base de datos.
+     */
+    public static Map<Long, String> devuelveEncargado(long roleId, long idEmpresa) throws SQLException {
+        Map<Long, String> listaEncargados = new TreeMap<>();
+        try (Connection conn = ConectaDB.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(COLSULTAME)) {
+            pstmt.setLong(1, roleId);
+            pstmt.setLong(2, idEmpresa);
+            pstmt.setBoolean(3, ACTIVO);
+            pstmt.setBoolean(4, ACTIVO);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                while (rs.next()) {
+                    long idUsuario = rs.getLong("id_ctrol_usuario");
+                    String nombre = rs.getString("nombre");
+                    String apellidoPat = rs.getString("apellido_pat");
+                    String apellidoMat = rs.getString("apellido_mat");
+                    String nombreCompleto = String.join(" ", nombre, apellidoPat, apellidoMat);
+                    listaEncargados.put(idUsuario, nombreCompleto);
+                }
             }
-        } catch (SQLException ex) {
-            System.out.println("Error: " + ex.getLocalizedMessage());
-            return null;
-        } finally {
-            cerrarPreparaStatement(pstm);
-            cerrarResultSet(resultado);
-            cerrarConexion(conecta);
+        }
+        return listaEncargados;
+    }
+
+    /**
+     * Verifica si un número de sucursal ya existe para una empresa específica.
+     *
+     * @param idEmpresa El ID de la empresa.
+     * @param numeroSuc El número de sucursal a verificar.
+     * @return {@code true} si el número de sucursal ya existe, {@code false} en caso contrario.
+     * @throws SQLException si ocurre un error de base de datos.
+     */
+    public static boolean isNumeroSucursalValidado(long idEmpresa, String numeroSuc) throws SQLException {
+        try (Connection conn = ConectaDB.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(NUMSUCVERIFICADO)) {
+            pstmt.setLong(1, idEmpresa);
+            pstmt.setBoolean(2, ACTIVO);
+            pstmt.setString(3, numeroSuc);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                return rs.next(); // Si hay un resultado, el número ya existe.
+            }
         }
     }
 
-    public static Map<Long, String> devuelveEncargado(long roles, long idEmpresa) {
-        try {
-            listalosEncargados = new TreeMap<>();
-            Connection conectados = obtenerConexion();
-            PreparedStatement ps = conectados.prepareStatement(COLSULTAME);
-            ps.setLong(1, roles);
-            ps.setLong(2, idEmpresa);
-            ps.setBoolean(3, ACT);
-            ps.setBoolean(4, ACT);
-            ResultSet res = ps.executeQuery();
-            while (res.next()) {
-                var nombre = res.getString(2);
-                var apellidopat = res.getString(3);
-                var apellidomat = res.getString(4);
-                var idrols = res.getLong(8);
-                var unido = nombre + " " + apellidopat + " " + apellidomat;
-                listalosEncargados.put(idrols, unido);
+    /**
+     * Guarda una nueva sucursal en la base de datos. La operación se ejecuta en una transacción.
+     *
+     * @throws SQLException si ocurre un error de base de datos.
+     */
+    public static void guardaSucursal(long idEmpresa, String nomSuc, String direccionSuc,
+                                      String cp, String tel1, String tel2, String email, String encargado, String numeroSuc, long idUsuario) throws SQLException {
+        try (Connection conn = ConectaDB.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement pstmt = conn.prepareStatement(INSERTASUC)) {
+                pstmt.setLong(1, idEmpresa);
+                pstmt.setString(2, nomSuc);
+                pstmt.setString(3, direccionSuc);
+                pstmt.setString(4, cp);
+                pstmt.setString(5, tel1);
+                pstmt.setString(6, tel2);
+                pstmt.setString(7, email);
+                pstmt.setString(8, encargado);
+                pstmt.setString(9, numeroSuc);
+                pstmt.setTimestamp(10, Timestamp.valueOf(LocalDateTime.now()));
+                pstmt.setLong(11, idUsuario);
+                pstmt.executeUpdate();
+                conn.commit();
+                LOGGER.info("Sucursal guardada exitosamente: " + nomSuc);
+            } catch (SQLException e) {
+                conn.rollback();
+                LOGGER.log(Level.SEVERE, "Error al guardar sucursal, se revirtió la transacción.", e);
+                throw e;
             }
-            if (listalosEncargados.isEmpty()) {
-                listalosEncargados.put(0L, "Valor no encontrado");
-                return listalosEncargados;
-            } else {
-                return listalosEncargados;
-            }
-        } catch (SQLException ex) {
-            System.out.println("Error: -> " + ex.getLocalizedMessage());
-            listalosEncargados.put(0L, ex.getSQLState());
-            return listalosEncargados;
-        }
-    }
-    
-    public static boolean NumSucValidado(long numero, String numeroSuc) {
-        try {
-            cnt = obtenerConexion();
-            ppstm = cnt.prepareStatement(NUMSUCVERIFICADO);
-            ppstm.setLong(1, numero);
-            ppstm.setBoolean(2, ACT);
-            ppstm.setString(3, numeroSuc);
-            rest = ppstm.executeQuery();
-            while (rest.next()) {                
-                elnumerosuc = rest.getString(1);
-            }
-            return numeroSuc.equals(elnumerosuc);
-        } catch(SQLException e) {
-            System.out.println("Error: " + e.getLocalizedMessage());
-            return false;
-        } finally {
-            cerrarPreparaStatement(ppstm);
-            cerrarResultSet(rest);
-            cerrarConexion(cnt);
         }
     }
 
-    public static boolean guardaSucursal(long idem, String nomSuc, String direccionSuc,
-            String cp, String tel1, String tel2, String emails, String enc, String numeroSuc, long idusua) {
-        var fechaActual = now();
-        var timestamp = valueOf(fechaActual);
-        try {
-            con = obtenerConexion();
-            pst = con.prepareStatement(INSERTASUC);
-            pst.setLong(1, idem);
-            pst.setString(2, nomSuc);
-            pst.setString(3, direccionSuc);
-            pst.setString(4, cp);
-            pst.setString(5, tel1);
-            pst.setString(6, tel2);
-            pst.setString(7, emails);
-            pst.setString(8, enc);
-            pst.setString(9, numeroSuc);
-            pst.setTimestamp(10, timestamp);
-            pst.setLong(11, idusua);
-            int realizado = pst.executeUpdate();
-            cerrarCommit(con);
-            return (realizado == 1);
-        } catch(SQLException ex) {
-            System.out.println("Error al guardar la sucursal: " + ex.getLocalizedMessage());
-            System.out.println("Error: " + ex.getSQLState());
-            rollback(con);
-            return false;
-        } finally {
-            cerrarPreparaStatement(pst);
-            cerrarConexion(con);
-        }
-    }
-    
-    public static long devuelveIDSucursal(String numeroSucursales){
-        try {
-            conec = obtenerConexion();
-            ptm = conec.prepareStatement(DEVUELIDSUC);
-            ptm.setString(1, numeroSucursales);
-            resulta = ptm.executeQuery();
-            if (resulta.next()) {                
-                elidentificadorSuc = resulta.getLong(1);
+    /**
+     * Devuelve el ID de una sucursal basado en su número único.
+     *
+     * @param numeroSucursal El número de la sucursal.
+     * @return Un {@link Optional<Long>} con el ID de la sucursal si se encuentra, o vacío en caso contrario.
+     * @throws SQLException si ocurre un error de base de datos.
+     */
+    public static Optional<Long> devuelveIDSucursal(String numeroSucursal) throws SQLException {
+        try (Connection conn = ConectaDB.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(DEVUELIDSUC)) {
+            pstmt.setString(1, numeroSucursal);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                return rs.next() ? Optional.of(rs.getLong(1)) : Optional.empty();
             }
-            if(elidentificadorSuc > 0L ) {
-                return  elidentificadorSuc;
-            } else {
-                System.out.println("EL numero de sucursal no se encontro");
-                return 0L;
+        }
+    }
+
+    /**
+     * Inserta un registro de control para una sucursal (activación/desactivación).
+     *
+     * @param idSucursal El ID de la sucursal.
+     * @param estado     El estado de la sucursal (true para activa).
+     * @throws SQLException si ocurre un error de base de datos.
+     */
+    public static void insertaControl(long idSucursal, boolean estado) throws SQLException {
+        try (Connection conn = ConectaDB.getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement pstmt = conn.prepareStatement(INSERTACONTROLSUC)) {
+                pstmt.setLong(1, idSucursal);
+                pstmt.setBoolean(2, estado);
+                pstmt.executeUpdate();
+                conn.commit();
+                LOGGER.info("Registro de control para la sucursal ID " + idSucursal + " guardado.");
+            } catch (SQLException e) {
+                conn.rollback();
+                LOGGER.log(Level.SEVERE, "Error al guardar control de sucursal, se revirtió la transacción.", e);
+                throw e;
             }
-        } catch(SQLException ex) {
-            System.out.println("Error al buscar el identificador de sucursal\n" + ex.getLocalizedMessage());
-            System.out.println("Error: ----> " + ex.getSQLState());
-            return 0L;
-        } finally {
-            cerrarPreparaStatement(ptm);
-            cerrarResultSet(resulta);
-            cerrarConexion(conec);
         }
     }
-    
-    public static boolean insertaControl(long suc, boolean edos) {
-        try {
-            cnn = obtenerConexion();
-            psts = cnn.prepareStatement(INSERTACONTROLSUC);
-            psts.setLong(1, suc);
-            psts.setBoolean(2, edos);
-            var hecho = psts.executeUpdate();
-            cerrarCommit(cnn);
-            return (hecho == 1);
-        } catch(SQLException ex) {
-            System.out.println("Error al guardar el control de la sucursal\n" +ex.getLocalizedMessage());
-            System.out.println("Error______---> " + ex.getSQLState());
-            rollback(cnn);
-            return false;
-        } finally {
-            cerrarPreparaStatement(psts);
-            cerrarConexion(cnn);
-        }
-    }
-    
+
     private final static String CONSULTAEMPRESA = "SELECT ce.id_empresa, de.razon_social, "
             + "ce.estatus_empresa, ds.id_sucursal, "
             + "ds.nombre_sucursal,csc.estatus_suc "
@@ -211,7 +205,7 @@ public final class ControlSucursal implements Serializable {
             + "AND csc.estatus_suc= ?";
 
     private final static String COLSULTAME = "SELECT dus.id_ctrol_usuario,dus.nombre, dus.apellido_pat, dus.apellido_mat, "
-            + "dus.id_empresa, du.usuario_nombre, du.status_de_usuario, du.id_role "
+            + "dus.id_empresa, du.usuario_nombre, du.status_de_usuario "
             + "FROM datos_usuarios dus "
             + "INNER JOIN datos_usuario du "
             + "ON du.id_dato_control = dus.id_ctrol_usuario "
@@ -223,47 +217,21 @@ public final class ControlSucursal implements Serializable {
             + "AND dus.id_empresa= ? "
             + "AND du.status_de_usuario= ? "
             + "AND ctrlemp.estatus_empresa= ?";
-    
-    
+
+    // Consulta corregida para ser más precisa.
     private final static String NUMSUCVERIFICADO = "SELECT dsuc.numero_suc FROM datos_sucursal dsuc "
-            + "INNER JOIN control_suc csuc " 
-            + "ON csuc.id_suc = dsuc.id_sucursal " 
-            + "INNER JOIN datos_empresa demp "
-            + "ON demp.id_empresa = dsuc.id_empresa " 
-            + "INNER JOIN control_empresa cemp " 
-            + "ON cemp.id_empresa = demp.id_empresa " 
-            + "WHERE demp.id_empresa= ? " 
-            + "AND cemp.estatus_empresa= ?"
+            + "INNER JOIN control_empresa cemp ON cemp.id_empresa = dsuc.id_empresa "
+            + "WHERE dsuc.id_empresa= ? "
+            + "AND cemp.estatus_empresa= ? "
             + "AND dsuc.numero_suc= ?";
-    
+
     private final static String INSERTASUC = "INSERT INTO datos_sucursal(id_empresa, nombre_sucursal, direccion_sucursal, "
             + "codigo_postal_suc, telefono1_suc, telefono2_suc, email_suc, encargado_suc, numero_suc, fecha_creacion, id_usuario) "
             + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    
+
     private final static String DEVUELIDSUC = "SELECT id_sucursal FROM datos_sucursal "
             + "WHERE numero_suc= ?";
-    
-    private final static String INSERTACONTROLSUC = "INSERT INTO control_suc(id_suc, estatus_suc) VALUES(?, ?)";
 
-    private static long elidentificadorSuc;
-    private static String elnumerosuc;
-    private static final boolean ACT = true;
-    private static Map<Long, String> listalosEncargados;
-    private static Connection conecta;
-    private static Connection cnt;
-    private static Connection con;
-    private static Connection conec;
-    private static Connection cnn;
-    private static PreparedStatement pstm;
-    private static PreparedStatement ppstm;
-    private static PreparedStatement pst;
-    private static PreparedStatement ptm;
-    private static PreparedStatement psts;
-    private static ResultSet resultado;
-    private static ResultSet rest;
-    private static ResultSet resul;
-    private static ResultSet resulta;
-    @Serial
-    private static final long serialVersionUID = -5022490814788863707L;
+    private final static String INSERTACONTROLSUC = "INSERT INTO control_suc(id_suc, estatus_suc) VALUES(?, ?)";
 
 }
